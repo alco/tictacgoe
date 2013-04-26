@@ -9,7 +9,7 @@ import (
 )
 
 type Board struct {
-	b [3][3]int
+	b         [3][3]int
 	freeCells int
 }
 
