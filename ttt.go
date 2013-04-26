@@ -10,6 +10,7 @@ import (
 
 type Board struct {
 	b [3][3]int
+	freeCells int
 }
 
 func NewBoard() *Board {
@@ -19,6 +20,7 @@ func NewBoard() *Board {
 			b.b[i][j] = ' '
 		}
 	}
+	b.freeCells = 9
 	return &b
 }
 
@@ -39,13 +41,22 @@ const (
 	OKMove = iota
 	NoMove
 	GameFinished
+
+	MeWin
+	HeWin
+	Draw
 )
 
 func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 	var cell = &b.b[coords[0]][coords[1]]
 	if *cell == ' ' {
 		*cell = 'X'
-		return OKMove, nil
+		b.freeCells -= 1
+		if b.freeCells == 0 {
+			return Draw, nil
+		} else {
+			return OKMove, nil
+		}
 	}
 	return NoMove, errors.New("\x1b[31mCell already taken.\x1b[0m")
 }
@@ -66,13 +77,13 @@ func getMove() (str string, err error) {
 	return str[:len(str)-1], err
 }
 
-func parseLetter(str string, coord *int) bool {
-	switch str {
-	case "a":
+func parseLetter(char byte, coord *int) bool {
+	switch char {
+	case 'a':
 		*coord = 0
-	case "b":
+	case 'b':
 		*coord = 1
-	case "c":
+	case 'c':
 		*coord = 2
 	default:
 		return false
@@ -80,9 +91,9 @@ func parseLetter(str string, coord *int) bool {
 	return true
 }
 
-func parseDigit(str string, coord *int) bool {
-	if len(str) == 1 && str[0] >= '1' && str[0] <= '3' {
-		*coord = int(str[0] - '1')
+func parseDigit(char byte, coord *int) bool {
+	if char >= '1' && char <= '3' {
+		*coord = int(char - '1')
 		return true
 	}
 	return false
@@ -91,20 +102,18 @@ func parseDigit(str string, coord *int) bool {
 func parseMove(move string) (coords [2]int, err error) {
 	err = errors.New("err: Invalid move.")
 
+	move = strings.Replace(move, " ", "", -1)
 	if len(move) == 0 {
 		err = errors.New("err: Please make a move.")
 		return
-	}
-
-	var fields = strings.Fields(move)
-	if len(fields) != 2 {
+	} else if len(move) != 2 {
 		return
 	}
 
-	if !(parseLetter(fields[0], &coords[0]) || parseLetter(fields[1], &coords[0])) {
+	if !(parseLetter(move[0], &coords[0]) || parseLetter(move[1], &coords[0])) {
 		return
 	}
-	if !(parseDigit(fields[0], &coords[1]) || parseDigit(fields[1], &coords[1])) {
+	if !(parseDigit(move[0], &coords[1]) || parseDigit(move[1], &coords[1])) {
 		return
 	}
 
@@ -136,7 +145,16 @@ func main() {
 				fmt.Println(err)
 				continue
 			} else if result > GameFinished {
-				fmt.Println("\x1b[43mYou win with result:\x1b[0m", result)
+				board.draw()
+				println()
+				switch result {
+				case Draw:
+					fmt.Println("*** \x1b[7mIt's a draw\x1b[0m ***")
+				case MeWin:
+					fmt.Println("*** \x1b[42m\x1b[30mYou win!\x1b[0m ***")
+				case HeWin:
+					fmt.Println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
+				}
 				os.Exit(0)
 			}
 
