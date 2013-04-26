@@ -63,7 +63,7 @@ func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 var stdin = bufio.NewReader(os.Stdin)
 
 func getMove() (str string, err error) {
-	print("> ")
+	print("> \033[K")
 
 	str, err = stdin.ReadString('\n')
 	if err != nil {
@@ -133,11 +133,13 @@ func main() {
 			coords, err := parseMove(move)
 			if err != nil {
 				fmt.Printf("\x1b[31m%v\x1b[0m\n", err)
+				fmt.Printf("\033[7;0A")
 				continue
 			}
 			result, err := board.makeMove(coords, 'X')
 			if err != nil {
 				fmt.Println(err)
+				fmt.Printf("\033[7;0A")
 				continue
 			} else if result > GameFinished {
 				board.draw()
@@ -152,6 +154,7 @@ func main() {
 				}
 				os.Exit(0)
 			}
+			fmt.Printf("\033[8;0A")
 
 			break
 		}
