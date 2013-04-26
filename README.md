@@ -21,7 +21,9 @@ The first player is selected randomly. Each player makes a move by typing in the
 ### Example session
 
 ```
-Welcome to Tic-Tac-Toe.
+$ ttt
+
+Welcome to Tic-Tac-Toe. Listening on port 8888.
 
 > connect 127.0.0.1
 Trying to connect...
