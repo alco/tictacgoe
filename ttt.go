@@ -54,21 +54,16 @@ func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 		b.freeCells -= 1
 		if b.freeCells == 0 {
 			return Draw, nil
-		} else {
-			return OKMove, nil
 		}
+		return OKMove, nil
 	}
 	return NoMove, errors.New("\x1b[31mCell already taken.\x1b[0m")
-}
-
-func printPrompt() {
-	print("> ")
 }
 
 var stdin = bufio.NewReader(os.Stdin)
 
 func getMove() (str string, err error) {
-	printPrompt()
+	print("> ")
 
 	str, err = stdin.ReadString('\n')
 	if err != nil {
