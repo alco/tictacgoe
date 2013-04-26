@@ -53,10 +53,14 @@ func getMove() (str string, err error) {
 
 func parseLetter(str string, coord *int) bool {
 	switch str {
-	case "a": *coord = 0
-	case "b": *coord = 1
-	case "c": *coord = 2
-	default:  return false
+	case "a":
+		*coord = 0
+	case "b":
+		*coord = 1
+	case "c":
+		*coord = 2
+	default:
+		return false
 	}
 	return true
 }
