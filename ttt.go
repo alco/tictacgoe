@@ -35,6 +35,21 @@ c [%c] [%c] [%c]
 
 }
 
+const (
+	OKMove = iota
+	NoMove
+	GameFinished
+)
+
+func (b *Board) makeMove(coords [2]int, char int) (int, error) {
+	var cell = &b.b[coords[0]][coords[1]]
+	if *cell == ' ' {
+		*cell = 'X'
+		return OKMove, nil
+	}
+	return NoMove, errors.New("\x1b[31mCell already taken.\x1b[0m")
+}
+
 func printPrompt() {
 	print("> ")
 }
@@ -101,10 +116,11 @@ func main() {
 	var board = NewBoard()
 
 	for {
-		board.draw()
 		println("\nYour turn.")
 
 		for {
+			board.draw()
+
 			var move, err = getMove()
 			if err != nil {
 				os.Exit(0)
@@ -113,17 +129,15 @@ func main() {
 			coords, err := parseMove(move)
 			if err != nil {
 				fmt.Printf("\x1b[31m%v\x1b[0m\n", err)
-				board.draw()
 				continue
 			}
-
-			var cell = &board.b[coords[0]][coords[1]]
-			if *cell == ' ' {
-				*cell = 'X'
-			} else {
-				fmt.Println("\x1b[31mCell already taken.\x1b[0m")
-				board.draw()
+			result, err := board.makeMove(coords, 'X')
+			if err != nil {
+				fmt.Println(err)
 				continue
+			} else if result > GameFinished {
+				fmt.Println("\x1b[43mYou win with result:\x1b[0m", result)
+				os.Exit(0)
 			}
 
 			break
