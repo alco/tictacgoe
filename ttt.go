@@ -83,7 +83,7 @@ func main() {
 	}
 
 	for {
-		println("\nYour turn.")
+		println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
 
 		for {
 			board.draw()
