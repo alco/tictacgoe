@@ -5,7 +5,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/rpc"
 	"os"
 	"strings"
 )
@@ -104,41 +103,15 @@ func main() {
 	var firstPlayer int
 	if serverMode {
 		println("Listening on port 8888...")
-		playerChan := listen(board)
-		firstPlayer = <-playerChan
-		if firstPlayer == 1 {
-			ownChar, oppChar = 'X', 'O'
-		} else {
-			ownChar, oppChar = 'O', 'X'
-		}
+		firstPlayer = listen(board)
 	} else {
-		client, err := rpc.Dial("tcp", "localhost:8888")
-		if err != nil {
-			panic(err)
-		}
-		var nums = genNums()
-		var serverNums []int
-		err = client.Call("BoardRPC.WhoseTurn", nums, &serverNums)
-		if err != nil {
-			panic(err)
-		}
-
-		firstPlayer = getFirstPlayer(nums, serverNums)
-		var serverOK bool
-		err = client.Call("BoardRPC.AgreeOnTurn", firstPlayer, &serverOK)
-		if err != nil {
-			panic(err)
-		}
-
-		if !serverOK {
-			panic("Could not agree on turn")
-		}
-
-		if firstPlayer == 2 {
-			ownChar, oppChar = 'X', 'O'
-		} else {
-			ownChar, oppChar = 'O', 'X'
-		}
+		println("Connecting to server...")
+		firstPlayer = connectToServer("localhost:8888")
+	}
+	if firstPlayer == 1 {
+		ownChar, oppChar = 'X', 'O'
+	} else {
+		ownChar, oppChar = 'O', 'X'
 	}
 	println("First player = ", firstPlayer)
 

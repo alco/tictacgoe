@@ -10,18 +10,6 @@ import (
 
 const RANDOM_TRIES = 10
 
-type BoardRPC struct {
-	*Board
-	firstPlayer int
-	comChan chan int
-}
-
-type ArbitrageData struct {
-	Nums   []int
-	Player int
-	Index  int
-}
-
 func genNums() []int {
 	nums := make([]int, RANDOM_TRIES)
 	for i := range nums {
@@ -38,6 +26,12 @@ func getFirstPlayer(myNums []int, hisNums []int) int {
 		}
 	}
 	return 0
+}
+
+type BoardRPC struct {
+	*Board
+	firstPlayer int
+	comChan chan int
 }
 
 func (b *BoardRPC) MakeMove(coords [2]int, result *int) error {
@@ -68,18 +62,20 @@ func (b *BoardRPC) AgreeOnTurn(clientTurn int, result *bool) error {
 	return nil
 }
 
-func listen(b *Board) chan int {
+/// Server
+
+func listen(b *Board) int {
 	board := &BoardRPC{}
 	board.Board = b
 	board.comChan = make(chan int)
+
     err := rpc.Register(board)
     if err != nil {
         panic(err)
     }
-
     go accept()
 
-	return board.comChan
+	return <-board.comChan
 }
 
 func accept() {
@@ -98,12 +94,31 @@ func accept() {
 	println("Finished serving conn")
 }
 
-// Decide whose turn is first
-func pregameArbitrage(client net.Conn) {
-	// Generate a bunch of randomly selected turns and find the first one that
-	// agrees with the other side
-	nums := make([]int, RANDOM_TRIES)
-	for i := range nums {
-		nums[i] = rand.Int() % 2  // 0 - my turn; 1 - his turn
+/// Client
+
+func connectToServer(address string) int {
+	client, err := rpc.Dial("tcp", address)
+	if err != nil {
+		panic(err)
 	}
+
+	var nums = genNums()
+	var serverNums []int
+	err = client.Call("BoardRPC.WhoseTurn", nums, &serverNums)
+	if err != nil {
+		panic(err)
+	}
+
+	var firstPlayer = getFirstPlayer(nums, serverNums)
+	var serverOK bool
+	err = client.Call("BoardRPC.AgreeOnTurn", firstPlayer, &serverOK)
+	if err != nil {
+		panic(err)
+	}
+
+	if !serverOK {
+		panic("Could not agree on turn")
+	}
+
+	return 3 - firstPlayer  // First player is from the server's point of view
 }
