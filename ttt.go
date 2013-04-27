@@ -51,30 +51,17 @@ c %s %s %s
 
 func (b *Board) checkWinningCondition(coords [2]int) int {
 	var i, j = coords[0], coords[1]
+	var char int
 
 	// Check horizontal
-	var allSame = true
-	var char = b.b[i][0]
-	for k := 1; k < 3; k++ {
-		if b.b[i][k] != char {
-			allSame = false
-			break
-		}
-	}
-	if allSame && char != ' ' {
+	char = b.b[i][0]
+	if char != ' ' && b.b[i][1] == char && b.b[i][2] == char {
 		return MeWin
 	}
 
 	// Check vertical
-	allSame = true
 	char = b.b[0][j]
-	for k := 1; k < 3; k++ {
-		if b.b[k][j] != char {
-			allSame = false
-			break
-		}
-	}
-	if allSame && char != ' ' {
+	if char != ' ' && b.b[1][j] == char && b.b[2][j] == char {
 		return MeWin
 	}
 
@@ -83,27 +70,13 @@ func (b *Board) checkWinningCondition(coords [2]int) int {
 		return 0 // not a diagonal
 	}
 
-	allSame = true
 	char = b.b[0][0]
-	for k := 1; k < 3; k++ {
-		if b.b[k][k] != char {
-			allSame = false
-			break
-		}
-	}
-	if allSame && char != ' ' {
+	if char != ' ' && b.b[1][1] == char && b.b[2][2] == char {
 		return MeWin
 	}
 
-	allSame = true
 	char = b.b[0][2]
-	for k := 1; k < 3; k++ {
-		if b.b[k][2-k] != char {
-			allSame = false
-			break
-		}
-	}
-	if allSame && char != ' ' {
+	if char != ' ' && b.b[1][1] == char && b.b[2][0] == char {
 		return MeWin
 	}
 
