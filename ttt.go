@@ -8,6 +8,18 @@ import (
 	"strings"
 )
 
+func formatCell(char int) string {
+	var seq string
+	if char == 'O' {
+		seq = "\x1b[41m[%c]\x1b[0m"
+	} else if char == 'X' {
+		seq = "\x1b[7m[%c]\x1b[0m"
+	} else {
+		seq = "[%c]"
+	}
+	return fmt.Sprintf(seq, char)
+}
+
 type Board struct {
 	b         [3][3]int
 	freeCells int
@@ -27,13 +39,14 @@ func NewBoard() *Board {
 func (b *Board) draw() {
 	fmt.Printf(`
    1   2   3
-a [%c] [%c] [%c]
-b [%c] [%c] [%c]
-c [%c] [%c] [%c]
+a %s %s %s
+b %s %s %s
+c %s %s %s
 `,
-		b.b[0][0], b.b[0][1], b.b[0][2],
-		b.b[1][0], b.b[1][1], b.b[1][2],
-		b.b[2][0], b.b[2][1], b.b[2][2])
+formatCell(b.b[0][0]),
+formatCell(b.b[0][1]), formatCell(b.b[0][2]),
+		formatCell(b.b[1][0]), formatCell(b.b[1][1]), formatCell(b.b[1][2]),
+		formatCell(b.b[2][0]), formatCell(b.b[2][1]), formatCell(b.b[2][2]))
 
 }
 
@@ -50,14 +63,25 @@ const (
 func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 	var cell = &b.b[coords[0]][coords[1]]
 	if *cell == ' ' {
-		*cell = 'X'
+		*cell = char
 		b.freeCells -= 1
 		if b.freeCells == 0 {
 			return Draw, nil
 		}
 		return OKMove, nil
 	}
-	return NoMove, errors.New("\x1b[31mCell already taken.\x1b[0m")
+	return NoMove, errors.New("Cell already taken.")
+}
+
+func (b *Board) waitForOpponent() (int, error) {
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 3; j++ {
+			if b.b[i][j] == ' ' {
+				return b.makeMove([2]int{i,j}, 'O')
+			}
+		}
+	}
+	return NoMove, errors.New("No free cell found")
 }
 
 var stdin = bufio.NewReader(os.Stdin)
@@ -115,9 +139,29 @@ func parseMove(move string) (coords [2]int, err error) {
 	return coords, nil
 }
 
+func printError(err error) {
+	fmt.Printf("\x1b[31m%v\x1b[0m\n", err)
+}
+
 func main() {
 	fmt.Println("*** Welcome to Tic-Tac-Go ***")
 	var board = NewBoard()
+
+	var checkResult = func(result int) {
+		if result > GameFinished {
+			board.draw()
+			println()
+			switch result {
+			case Draw:
+				fmt.Println("*** \x1b[7mIt's a draw\x1b[0m ***")
+			case MeWin:
+				fmt.Println("*** \x1b[42m\x1b[30mYou win!\x1b[0m ***")
+			case HeWin:
+				fmt.Println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
+			}
+			os.Exit(0)
+		}
+	}
 
 	for {
 		println("\nYour turn.")
@@ -132,26 +176,24 @@ func main() {
 
 			coords, err := parseMove(move)
 			if err != nil {
-				fmt.Printf("\x1b[31m%v\x1b[0m\n", err)
+				printError(err)
 				continue
 			}
+
 			result, err := board.makeMove(coords, 'X')
 			if err != nil {
-				fmt.Println(err)
+				printError(err)
 				continue
-			} else if result > GameFinished {
-				board.draw()
-				println()
-				switch result {
-				case Draw:
-					fmt.Println("*** \x1b[7mIt's a draw\x1b[0m ***")
-				case MeWin:
-					fmt.Println("*** \x1b[42m\x1b[30mYou win!\x1b[0m ***")
-				case HeWin:
-					fmt.Println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
-				}
+			}
+			checkResult(result)
+
+			println("Waiting for opponent...")
+			result, err = board.waitForOpponent()
+			if err != nil {
+				printError(err)
 				os.Exit(0)
 			}
+			checkResult(result)
 
 			break
 		}
