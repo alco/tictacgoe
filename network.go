@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-    "net"
-    "net/rpc"
+	"net"
+	"net/rpc"
 )
 
 const RANDOM_TRIES = 10
@@ -13,7 +13,7 @@ const RANDOM_TRIES = 10
 func genNums() []int {
 	nums := make([]int, RANDOM_TRIES)
 	for i := range nums {
-		nums[i] = 1 + rand.Int() % 2  // 1 - my turn; 2 - his turn (server's point of view)
+		nums[i] = 1 + rand.Int()%2 // 1 - my turn; 2 - his turn (server's point of view)
 	}
 	return nums
 }
@@ -31,7 +31,7 @@ func getFirstPlayer(myNums []int, hisNums []int) int {
 type BoardRPC struct {
 	*Board
 	firstPlayer int
-	comChan chan int
+	comChan     chan int
 }
 
 func (b *BoardRPC) MakeMove(coords [2]int, result *int) error {
@@ -69,20 +69,20 @@ func listen(b *Board) int {
 	board.Board = b
 	board.comChan = make(chan int)
 
-    err := rpc.Register(board)
-    if err != nil {
-        panic(err)
-    }
-    go accept()
+	err := rpc.Register(board)
+	if err != nil {
+		panic(err)
+	}
+	go accept()
 
 	return <-board.comChan
 }
 
 func accept() {
-    l, err := net.Listen("tcp", ":8888")
-    if err != nil {
-        panic(err)
-    }
+	l, err := net.Listen("tcp", ":8888")
+	if err != nil {
+		panic(err)
+	}
 	defer l.Close()
 
 	conn, err := l.Accept()
@@ -120,5 +120,5 @@ func connectToServer(address string) int {
 		panic("Could not agree on turn")
 	}
 
-	return 3 - firstPlayer  // First player is from the server's point of view
+	return 3 - firstPlayer // First player is from the server's point of view
 }
