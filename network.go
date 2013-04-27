@@ -8,9 +8,12 @@ import (
     "net/rpc"
 )
 
+const RANDOM_TRIES = 10
+
 type BoardRPC struct {
 	*Board
 	firstPlayer int
+	comChan chan int
 }
 
 type ArbitrageData struct {
@@ -19,61 +22,67 @@ type ArbitrageData struct {
 	Index  int
 }
 
+func genNums() []int {
+	nums := make([]int, RANDOM_TRIES)
+	for i := range nums {
+		nums[i] = 1 + rand.Int() % 2  // 1 - my turn; 2 - his turn (server's point of view)
+	}
+	return nums
+}
+
+func getFirstPlayer(myNums []int, hisNums []int) int {
+	for i := range myNums {
+		var myNum, hisNum = myNums[i], hisNums[i]
+		if myNum == hisNum {
+			return myNum
+		}
+	}
+	return 0
+}
+
 func (b *BoardRPC) MakeMove(coords [2]int, result *int) error {
 	fmt.Println("making move at coords", coords)
 	*result = 13
 	return nil
 }
 
-func (b *BoardRPC) WhoseTurn(clientNums []int, result *ArbitrageData) error {
-	nums := make([]int, RANDOM_TRIES)
-	for i := range nums {
-		nums[i] = 1 + rand.Int() % 2  // 1 - my turn; 2 - his turn
-	}
-	var index = 0
-	for i := range nums {
-		var myNum, hisNum = nums[i], clientNums[i]
-		if myNum == hisNum {
-			b.firstPlayer = myNum
-			index = i
-			break
-		}
-	}
+func (b *BoardRPC) WhoseTurn(clientNums []int, result *[]int) error {
+	nums := genNums()
+	b.firstPlayer = getFirstPlayer(nums, clientNums)
+	*result = nums
+
 	if b.firstPlayer == 0 {
 		panic("Not enough numbers :(")
 	}
-	fmt.Printf("Nums = %v\n", nums)
-	fmt.Printf("player = %v\n", b.firstPlayer)
-	fmt.Printf("index = %v\n", index)
-	var adata = ArbitrageData{nums, b.firstPlayer, index}
-	*result = adata
+
 	return nil
 }
 
 func (b *BoardRPC) AgreeOnTurn(clientTurn int, result *bool) error {
 	if clientTurn == b.firstPlayer {
 		*result = true
+		b.comChan <- b.firstPlayer
 	} else {
 		return errors.New("server: Could not agree on turn")
 	}
 	return nil
 }
 
-func listen(b *Board) chan net.Conn {
+func listen(b *Board) chan int {
 	board := &BoardRPC{}
 	board.Board = b
+	board.comChan = make(chan int)
     err := rpc.Register(board)
     if err != nil {
         panic(err)
     }
 
-	c := make(chan net.Conn)
-    go accept(c)
+    go accept()
 
-	return c
+	return board.comChan
 }
 
-func accept(c chan net.Conn) {
+func accept() {
     l, err := net.Listen("tcp", ":8888")
     if err != nil {
         panic(err)
@@ -85,13 +94,9 @@ func accept(c chan net.Conn) {
 		panic(err)
 	}
 
-	c <- conn
-
 	rpc.ServeConn(conn)
 	println("Finished serving conn")
 }
-
-const RANDOM_TRIES = 10
 
 // Decide whose turn is first
 func pregameArbitrage(client net.Conn) {

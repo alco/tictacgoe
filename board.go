@@ -113,7 +113,7 @@ func (b *Board) waitForOpponent() (int, error) {
 	for i := 0; i < 3; i++ {
 		for j := 0; j < 3; j++ {
 			if b.b[i][j] == ' ' {
-				return b.makeMove([2]int{i, j}, 'O')
+				return b.makeMove([2]int{i, j}, oppChar)
 			}
 		}
 	}

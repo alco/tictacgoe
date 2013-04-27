@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"errors"
+	"flag"
 	"fmt"
+	"net/rpc"
 	"os"
 	"strings"
 )
@@ -57,14 +59,31 @@ func parseMove(move string) (coords [2]int, err error) {
 	return coords, nil
 }
 
-func printError(err error) {
+func parseCommand(str string) (string, error) {
+	return "", errors.New("err: invalid command")
+}
+
+func printError(err interface{}) {
 	fmt.Printf("\x1b[31m%v\x1b[0m\n", err)
 }
 
+var mode = flag.String("mode", "server", "Which mode to run in: server or client")
+
 func main() {
+	flag.Parse()
+
+	var serverMode bool
+	if *mode == "server" {
+		serverMode = true
+	} else if *mode == "client" {
+		serverMode = false
+	} else {
+		printError("Unsupported mode")
+		os.Exit(1)
+	}
+
 	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
 	var board = NewBoard()
-	ownChar, oppChar = 'X', 'O'
 
 	var checkResult = func(result int) {
 		if result > GameFinished {
@@ -82,26 +101,46 @@ func main() {
 		}
 	}
 
-	println("Listening on port 8888...")
-	clientChan := listen(board)
-
-	inputChan := make(chan string)
-	go func() {
-		str, err := stdin.ReadString('\n')
+	var firstPlayer int
+	if serverMode {
+		println("Listening on port 8888...")
+		playerChan := listen(board)
+		firstPlayer = <-playerChan
+		if firstPlayer == 1 {
+			ownChar, oppChar = 'X', 'O'
+		} else {
+			ownChar, oppChar = 'O', 'X'
+		}
+	} else {
+		client, err := rpc.Dial("tcp", "localhost:8888")
 		if err != nil {
 			panic(err)
 		}
-		inputChan <- str
-	}()
+		var nums = genNums()
+		var serverNums []int
+		err = client.Call("BoardRPC.WhoseTurn", nums, &serverNums)
+		if err != nil {
+			panic(err)
+		}
 
-	select {
-	case client := <-clientChan:
-		pregameArbitrage(client)
-		println("Got client", client)
-		inputChan = nil
-	case str := <-inputChan:
-		println("got input", str)
+		firstPlayer = getFirstPlayer(nums, serverNums)
+		var serverOK bool
+		err = client.Call("BoardRPC.AgreeOnTurn", firstPlayer, &serverOK)
+		if err != nil {
+			panic(err)
+		}
+
+		if !serverOK {
+			panic("Could not agree on turn")
+		}
+
+		if firstPlayer == 2 {
+			ownChar, oppChar = 'X', 'O'
+		} else {
+			ownChar, oppChar = 'O', 'X'
+		}
 	}
+	println("First player = ", firstPlayer)
 
 	for {
 		println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
@@ -120,7 +159,7 @@ func main() {
 				continue
 			}
 
-			result, err := board.makeMove(coords, 'X')
+			result, err := board.makeMove(coords, ownChar)
 			if err != nil {
 				printError(err)
 				continue
