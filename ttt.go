@@ -49,6 +49,67 @@ c %s %s %s
 
 }
 
+func (b *Board) checkWinningCondition(coords [2]int) int {
+	var i, j = coords[0], coords[1]
+
+	// Check horizontal
+	var allSame = true
+	var char = b.b[i][0]
+	for k := 1; k < 3; k++ {
+		if b.b[i][k] != char {
+			allSame = false
+			break
+		}
+	}
+	if allSame && char != ' ' {
+		return MeWin
+	}
+
+	// Check vertical
+	allSame = true
+	char = b.b[0][j]
+	for k := 1; k < 3; k++ {
+		if b.b[k][j] != char {
+			allSame = false
+			break
+		}
+	}
+	if allSame && char != ' ' {
+		return MeWin
+	}
+
+	// Check diagonals
+	if (i+j)%2 == 1 {
+		return 0 // not a diagonal
+	}
+
+	allSame = true
+	char = b.b[0][0]
+	for k := 1; k < 3; k++ {
+		if b.b[k][k] != char {
+			allSame = false
+			break
+		}
+	}
+	if allSame && char != ' ' {
+		return MeWin
+	}
+
+	allSame = true
+	char = b.b[0][2]
+	for k := 1; k < 3; k++ {
+		if b.b[k][2-k] != char {
+			allSame = false
+			break
+		}
+	}
+	if allSame && char != ' ' {
+		return MeWin
+	}
+
+	return 0
+}
+
 const (
 	OKMove = iota
 	NoMove
@@ -64,7 +125,9 @@ func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 	if *cell == ' ' {
 		*cell = char
 		b.freeCells -= 1
-		if b.freeCells == 0 {
+		if result := b.checkWinningCondition(coords); result != 0 {
+			return result, nil
+		} else if b.freeCells == 0 {
 			return Draw, nil
 		}
 		return OKMove, nil
