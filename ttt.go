@@ -96,7 +96,9 @@ func main() {
 
 	select {
 	case client := <-clientChan:
+		pregameArbitrage(client)
 		println("Got client", client)
+		inputChan = nil
 	case str := <-inputChan:
 		println("got input", str)
 	}
