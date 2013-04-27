@@ -82,6 +82,25 @@ func main() {
 		}
 	}
 
+	println("Listening on port 8888...")
+	clientChan := listen(board)
+
+	inputChan := make(chan string)
+	go func() {
+		str, err := stdin.ReadString('\n')
+		if err != nil {
+			panic(err)
+		}
+		inputChan <- str
+	}()
+
+	select {
+	case client := <-clientChan:
+		println("Got client", client)
+	case str := <-inputChan:
+		println("got input", str)
+	}
+
 	for {
 		println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
 
