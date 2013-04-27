@@ -43,8 +43,7 @@ a %s %s %s
 b %s %s %s
 c %s %s %s
 `,
-formatCell(b.b[0][0]),
-formatCell(b.b[0][1]), formatCell(b.b[0][2]),
+		formatCell(b.b[0][0]), formatCell(b.b[0][1]), formatCell(b.b[0][2]),
 		formatCell(b.b[1][0]), formatCell(b.b[1][1]), formatCell(b.b[1][2]),
 		formatCell(b.b[2][0]), formatCell(b.b[2][1]), formatCell(b.b[2][2]))
 
@@ -77,7 +76,7 @@ func (b *Board) waitForOpponent() (int, error) {
 	for i := 0; i < 3; i++ {
 		for j := 0; j < 3; j++ {
 			if b.b[i][j] == ' ' {
-				return b.makeMove([2]int{i,j}, 'O')
+				return b.makeMove([2]int{i, j}, 'O')
 			}
 		}
 	}
