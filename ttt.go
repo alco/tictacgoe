@@ -62,7 +62,7 @@ func printError(err error) {
 }
 
 func main() {
-	fmt.Println("*** Welcome to Tic-Tac-Go ***")
+	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
 	var board = NewBoard()
 	ownChar, oppChar = 'X', 'O'
 
