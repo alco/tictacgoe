@@ -5,8 +5,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
+	"time"
 )
 
 var stdin = bufio.NewReader(os.Stdin)
@@ -99,6 +101,8 @@ func main() {
 			os.Exit(0)
 		}
 	}
+
+	rand.Seed(time.Now().Unix())
 
 	var firstPlayer int
 	if serverMode {
