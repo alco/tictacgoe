@@ -139,16 +139,35 @@ func main() {
 		// So we are just waiting for the client to call RPC methods in another
 		// goroutine. Once the game is finished, we receive a message on the
 		// 'done' channel.
-		println()
-		println("Waiting for opponent...")
-		board.draw()
+		if !myTurn {
+			println()
+			println("Waiting for opponent...")
+			board.draw()
+		}
 
 		<-done
 		os.Exit(0)
 	} else {
 		if !myTurn {
 			// Let the server make the initial turn
-			// server.makeTurn()
+			board.draw()
+			println()
+			println("Waiting for opponent...")
+
+			coords, serverResult, err := rpc_waitForOpponent(client)
+			if err != nil {
+				printError(err)
+				os.Exit(1)
+			}
+			result, err := board.makeMove(coords, oppChar)
+			if err != nil {
+				printError(err)
+				os.Exit(1)
+			}
+			if invert(serverResult) != result {
+				printError(errors.New("Either party is cheating!"))
+				os.Exit(1)
+			}
 		}
 
 		for {
