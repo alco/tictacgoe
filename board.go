@@ -36,6 +36,15 @@ func mapChar(char int) int {
 	return HeWin
 }
 
+func invert(result int) int {
+	if result == MeWin {
+		return HeWin
+	} else if result == HeWin {
+		return MeWin
+	}
+	return result
+}
+
 type Board struct {
 	b         [3][3]int
 	freeCells int

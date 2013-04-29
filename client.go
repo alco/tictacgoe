@@ -53,3 +53,11 @@ func rpc_waitForOpponent(client *rpc.Client) (coords [2]int, result int, err err
 
 	return data.Coords, data.Result, nil
 }
+
+func rpc_finishGameWithResult(client *rpc.Client, result int) error {
+	err := client.Call("BoardRPC.FinishGame", result, nil)
+	if err != nil {
+		return err
+	}
+	return nil
+}

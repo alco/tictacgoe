@@ -91,6 +91,19 @@ func main() {
 	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
 	var board = NewBoard()
 
+	rand.Seed(time.Now().Unix())
+
+	var firstPlayer int
+	var done chan bool
+	var client *rpc.Client
+	if serverMode {
+		println("Listening on port 8888...")
+		firstPlayer, done = listen(board)
+	} else {
+		println("Connecting to server...")
+		firstPlayer, client = connectToServer("localhost:8888")
+	}
+
 	var checkResult = func(result int) {
 		if result > GameFinished {
 			board.draw()
@@ -103,21 +116,13 @@ func main() {
 			case HeWin:
 				fmt.Println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
 			}
+			err := rpc_finishGameWithResult(client, result)
+			if err != nil {
+				printError(err)
+				os.Exit(1)
+			}
 			os.Exit(0)
 		}
-	}
-
-	rand.Seed(time.Now().Unix())
-
-	var firstPlayer int
-	var done chan bool
-	var client *rpc.Client
-	if serverMode {
-		println("Listening on port 8888...")
-		firstPlayer, done = listen(board)
-	} else {
-		println("Connecting to server...")
-		firstPlayer, client = connectToServer("localhost:8888")
 	}
 
 	var myTurn bool
@@ -178,7 +183,7 @@ func main() {
 				printError(err)
 				os.Exit(1)
 			}
-			if serverResult != result {
+			if invert(serverResult) != result {
 				printError(errors.New("Either party is cheating!"))
 				os.Exit(1)
 			}
@@ -198,7 +203,7 @@ func main() {
 				printError(err)
 				os.Exit(1)
 			}
-			if serverResult != result {
+			if invert(serverResult) != result {
 				printError(errors.New("Either party is cheating!"))
 				os.Exit(1)
 			}

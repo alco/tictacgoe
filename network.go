@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/rpc"
@@ -33,6 +34,7 @@ type BoardRPC struct {
 	firstPlayer int
 	comChan     chan int
 	doneChan    chan bool
+	lastResult  int
 }
 
 func (b *BoardRPC) MakeMove(coords [2]int, clientResult *int) error {
@@ -41,6 +43,7 @@ func (b *BoardRPC) MakeMove(coords [2]int, clientResult *int) error {
 		return err
 	}
 
+	b.lastResult = result
 	*clientResult = result
 	return nil
 }
@@ -83,8 +86,27 @@ func (b *BoardRPC) MakeOwnMove(dummy int, data *MoveData) error {
 	println()
 	println("Waiting for opponent...")
 
+	b.lastResult = result
 	data.Coords = coords
 	data.Result = result
+	return nil
+}
+
+func (b *BoardRPC) FinishGame(clientResult int, void *int) error {
+	if invert(clientResult) != b.lastResult {
+		return errors.New("Mismatching results between server and client")
+	}
+	b.draw()
+	println()
+	switch b.lastResult {
+	case Draw:
+		fmt.Println("*** \x1b[7mIt's a draw\x1b[0m ***")
+	case MeWin:
+		fmt.Println("*** \x1b[42m\x1b[30mYou win!\x1b[0m ***")
+	case HeWin:
+		fmt.Println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
+	}
+	b.doneChan <- true
 	return nil
 }
 
