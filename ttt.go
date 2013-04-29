@@ -14,7 +14,7 @@ import (
 var stdin = bufio.NewReader(os.Stdin)
 
 func getMove() (str string, err error) {
-	print("> ")
+	print("> ") // prompt
 
 	str, err = stdin.ReadString('\n')
 	if err != nil {
@@ -50,9 +50,12 @@ func parseMove(move string) (coords [2]int, err error) {
 		return
 	}
 
+	// a1 format
 	if !(parseLetter(move[0], &coords[0]) || parseLetter(move[1], &coords[0])) {
 		return
 	}
+
+	// 1a format
 	if !(parseDigit(move[0], &coords[1]) || parseDigit(move[1], &coords[1])) {
 		return
 	}
@@ -74,11 +77,12 @@ func main() {
 	flag.Parse()
 
 	var serverMode bool
-	if *mode == "server" {
+	switch *mode {
+	case "server":
 		serverMode = true
-	} else if *mode == "client" {
+	case "client":
 		serverMode = false
-	} else {
+	default:
 		printError("Unsupported mode")
 		os.Exit(1)
 	}
@@ -112,14 +116,28 @@ func main() {
 		println("Connecting to server...")
 		firstPlayer = connectToServer("localhost:8888")
 	}
+
+	var myTurn bool
 	if firstPlayer == 1 {
 		ownChar, oppChar = 'X', 'O'
+		myTurn = true
 	} else {
 		ownChar, oppChar = 'O', 'X'
+		myTurn = false
 	}
-	println("First player = ", firstPlayer)
 
 	for {
+		if !myTurn {
+			println("Waiting for opponent...")
+			result, err := board.waitForOpponent()
+			if err != nil {
+				printError(err)
+				os.Exit(0)
+			}
+			checkResult(result)
+			continue
+		}
+
 		println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
 
 		for {
@@ -140,14 +158,6 @@ func main() {
 			if err != nil {
 				printError(err)
 				continue
-			}
-			checkResult(result)
-
-			println("Waiting for opponent...")
-			result, err = board.waitForOpponent()
-			if err != nil {
-				printError(err)
-				os.Exit(0)
 			}
 			checkResult(result)
 
