@@ -2,10 +2,10 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"math/rand"
 	"net"
 	"net/rpc"
+	"os"
 )
 
 const RANDOM_TRIES = 10
@@ -32,11 +32,59 @@ type BoardRPC struct {
 	*Board
 	firstPlayer int
 	comChan     chan int
+	doneChan    chan bool
 }
 
-func (b *BoardRPC) MakeMove(coords [2]int, result *int) error {
-	fmt.Println("making move at coords", coords)
-	*result = 13
+func (b *BoardRPC) MakeMove(coords [2]int, clientResult *int) error {
+	result, err := b.makeMove(coords, oppChar)
+	if err != nil {
+		return err
+	}
+
+	*clientResult = result
+	return nil
+}
+
+type MoveData struct {
+	Coords [2]int
+	Result int
+}
+
+func (b *BoardRPC) MakeOwnMove(dummy int, data *MoveData) error {
+	println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
+
+	var result int
+	var coords [2]int
+	for {
+		b.draw()
+
+		var move, err = getMove()
+		if err != nil {
+			return err
+			os.Exit(1)
+		}
+
+		coords, err = parseMove(move)
+		if err != nil {
+			printError(err)
+			continue
+		}
+
+		result, err = b.makeMove(coords, ownChar)
+		if err != nil {
+			printError(err)
+			continue
+		}
+
+		break
+	}
+
+	b.draw()
+	println()
+	println("Waiting for opponent...")
+
+	data.Coords = coords
+	data.Result = result
 	return nil
 }
 
@@ -62,12 +110,13 @@ func (b *BoardRPC) AgreeOnTurn(clientTurn int, result *bool) error {
 	return nil
 }
 
-/// Server
+/// Server API
 
-func listen(b *Board) int {
+func listen(b *Board) (int, chan bool) {
 	board := &BoardRPC{}
 	board.Board = b
 	board.comChan = make(chan int)
+	board.doneChan = make(chan bool)
 
 	err := rpc.Register(board)
 	if err != nil {
@@ -75,7 +124,7 @@ func listen(b *Board) int {
 	}
 	go accept()
 
-	return <-board.comChan
+	return <-board.comChan, board.doneChan
 }
 
 func accept() {
@@ -92,33 +141,4 @@ func accept() {
 
 	rpc.ServeConn(conn)
 	println("Finished serving conn")
-}
-
-/// Client
-
-func connectToServer(address string) int {
-	client, err := rpc.Dial("tcp", address)
-	if err != nil {
-		panic(err)
-	}
-
-	var nums = genNums()
-	var serverNums []int
-	err = client.Call("BoardRPC.WhoseTurn", nums, &serverNums)
-	if err != nil {
-		panic(err)
-	}
-
-	var firstPlayer = getFirstPlayer(nums, serverNums)
-	var serverOK bool
-	err = client.Call("BoardRPC.AgreeOnTurn", firstPlayer, &serverOK)
-	if err != nil {
-		panic(err)
-	}
-
-	if !serverOK {
-		panic("Could not agree on turn")
-	}
-
-	return 3 - firstPlayer // First player is from the server's point of view
 }

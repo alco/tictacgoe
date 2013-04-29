@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"math/rand"
+	"net/rpc"
 	"os"
 	"strings"
 	"time"
@@ -109,12 +110,14 @@ func main() {
 	rand.Seed(time.Now().Unix())
 
 	var firstPlayer int
+	var done chan bool
+	var client *rpc.Client
 	if serverMode {
 		println("Listening on port 8888...")
-		firstPlayer = listen(board)
+		firstPlayer, done = listen(board)
 	} else {
 		println("Connecting to server...")
-		firstPlayer = connectToServer("localhost:8888")
+		firstPlayer, client = connectToServer("localhost:8888")
 	}
 
 	var myTurn bool
@@ -124,6 +127,85 @@ func main() {
 	} else {
 		ownChar, oppChar = 'O', 'X'
 		myTurn = false
+	}
+
+	if serverMode {
+		// When using RPC, the client driver the game. This feels weird.
+		// So we are just waiting for the client to call RPC methods in another
+		// goroutine. Once the game is finished, we receive a message on the
+		// 'done' channel.
+		println()
+		println("Waiting for opponent...")
+		board.draw()
+
+		<-done
+		os.Exit(0)
+	} else {
+		if !myTurn {
+			// Let the server make the initial turn
+			// server.makeTurn()
+		}
+
+		for {
+			println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
+
+			var result int
+			var coords [2]int
+			for {
+				board.draw()
+
+				var move, err = getMove()
+				if err != nil {
+					os.Exit(0)
+				}
+
+				coords, err = parseMove(move)
+				if err != nil {
+					printError(err)
+					continue
+				}
+
+				result, err = board.makeMove(coords, ownChar)
+				if err != nil {
+					printError(err)
+					continue
+				}
+
+				break
+			}
+			serverResult, err := rpc_makeMove(client, coords)
+			if err != nil {
+				printError(err)
+				os.Exit(1)
+			}
+			if serverResult != result {
+				printError(errors.New("Either party is cheating!"))
+				os.Exit(1)
+			}
+			checkResult(result)
+
+			board.draw()
+			println()
+			println("Waiting for opponent...")
+
+			coords, serverResult, err = rpc_waitForOpponent(client)
+			if err != nil {
+				printError(err)
+				os.Exit(1)
+			}
+			result, err = board.makeMove(coords, oppChar)
+			if err != nil {
+				printError(err)
+				os.Exit(1)
+			}
+			if serverResult != result {
+				printError(errors.New("Either party is cheating!"))
+				os.Exit(1)
+			}
+			checkResult(result)
+		}
+
+		os.Exit(0)
 	}
 
 	for {
