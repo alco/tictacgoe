@@ -135,7 +135,7 @@ func main() {
 	}
 
 	if serverMode {
-		// When using RPC, the client driver the game. This feels weird.
+		// When using RPC, the client drives the game. This feels weird.
 		// So we are just waiting for the client to call RPC methods in another
 		// goroutine. Once the game is finished, we receive a message on the
 		// 'done' channel.
@@ -149,7 +149,7 @@ func main() {
 		os.Exit(0)
 	} else {
 		if !myTurn {
-			// Let the server make the initial turn
+			// Let the server make the initial move
 			board.draw()
 			println()
 			println("Waiting for opponent...")
