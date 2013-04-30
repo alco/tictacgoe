@@ -73,6 +73,8 @@ func printError(err interface{}) {
 }
 
 var mode = flag.String("mode", "server", "Which mode to run in: server or client")
+var addr = flag.String("addr", "localhost", "Address to connect to")
+var port = flag.Int("port", 8888, "Port to listen on or connect to")
 
 func main() {
 	flag.Parse()
@@ -97,11 +99,11 @@ func main() {
 	var done chan bool
 	var client *rpc.Client
 	if serverMode {
-		println("Listening on port 8888...")
-		firstPlayer, done = listen(board)
+		fmt.Printf("Listening on port %v...\n", *port)
+		firstPlayer, done = listen(board, *port)
 	} else {
 		println("Connecting to server...")
-		firstPlayer, client = connectToServer("localhost:8888")
+		firstPlayer, client = connectToServer(fmt.Sprintf("%v:%v", *addr, *port))
 	}
 
 	var checkResult = func(result int) {

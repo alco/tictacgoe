@@ -134,7 +134,7 @@ func (b *BoardRPC) AgreeOnTurn(clientTurn int, result *bool) error {
 
 /// Server API
 
-func listen(b *Board) (int, chan bool) {
+func listen(b *Board, port int) (int, chan bool) {
 	board := &BoardRPC{}
 	board.Board = b
 	board.comChan = make(chan int)
@@ -144,13 +144,13 @@ func listen(b *Board) (int, chan bool) {
 	if err != nil {
 		panic(err)
 	}
-	go accept()
+	go accept(port)
 
 	return <-board.comChan, board.doneChan
 }
 
-func accept() {
-	l, err := net.Listen("tcp", ":8888")
+func accept(port int) {
+	l, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 	if err != nil {
 		panic(err)
 	}
