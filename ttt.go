@@ -73,6 +73,11 @@ func printError(err interface{}) {
 
 var mode = flag.String("mode", "server", "Which mode to run in: server or client")
 
+type Cmd struct {
+	msgType int
+	payload interface{}
+}
+
 func main() {
 	flag.Parse()
 
@@ -90,8 +95,72 @@ func main() {
 	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
 	var board = NewBoard()
 
-	var checkResult = func(result int) {
-		if result > GameFinished {
+	rand.Seed(time.Now().Unix())
+
+	/*var firstPlayer int*/
+	var cmdChan chan int
+	var responseChan chan Cmd
+	var err error
+	if serverMode {
+		println("Listening on port 8888...")
+		cmdChan, responseChan, err = listen(board)
+		if err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	} else {
+		println("Connecting to server...")
+		cmdChan, responseChan, err = connectToServer("localhost:8888")
+		if err != nil {
+			printError(err)
+			os.Exit(1)
+		}
+	}
+
+	/*var myTurn bool*/
+	/*if firstPlayer == 1 {*/
+		/*ownChar, oppChar = 'X', 'O'*/
+		/*myTurn = true*/
+	/*} else {*/
+		/*ownChar, oppChar = 'O', 'X'*/
+		/*myTurn = false*/
+	/*}*/
+
+	for {
+		switch <-cmdChan {
+		case kCmdMakeTurn:
+			println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
+
+			for {
+				board.draw()
+
+				var move, err = getMove()
+				if err != nil {
+					os.Exit(0)
+				}
+
+				coords, err := parseMove(move)
+				if err != nil {
+					printError(err)
+					continue
+				}
+
+				result, err := board.makeMove(coords, ownChar)
+				if err != nil {
+					printError(err)
+					continue
+				}
+
+				responseChan <- Cmd{1, result}
+				break
+			}
+
+		case kCmdWaitForOpponent:
+			println("Waiting for opponent...")
+
+		case kCmdGameFinished:
+			var result = board.gameResult
+
 			board.draw()
 			println()
 			switch result {
@@ -106,62 +175,44 @@ func main() {
 		}
 	}
 
-	rand.Seed(time.Now().Unix())
+	/////////////////////////////////////////////////////////////////////
 
-	var firstPlayer int
-	if serverMode {
-		println("Listening on port 8888...")
-		firstPlayer = listen(board)
-	} else {
-		println("Connecting to server...")
-		firstPlayer = connectToServer("localhost:8888")
-	}
+	/*for {*/
+		/*if !myTurn {*/
+			/*println("Waiting for opponent...")*/
+			/*result, err := board.waitForOpponent()*/
+			/*if err != nil {*/
+				/*printError(err)*/
+				/*os.Exit(0)*/
+			/*}*/
+			/*checkResult(result)*/
+			/*continue*/
+		/*}*/
 
-	var myTurn bool
-	if firstPlayer == 1 {
-		ownChar, oppChar = 'X', 'O'
-		myTurn = true
-	} else {
-		ownChar, oppChar = 'O', 'X'
-		myTurn = false
-	}
+		/*println("\n<<< \x1b[1mYour turn\x1b[0m >>>")*/
 
-	for {
-		if !myTurn {
-			println("Waiting for opponent...")
-			result, err := board.waitForOpponent()
-			if err != nil {
-				printError(err)
-				os.Exit(0)
-			}
-			checkResult(result)
-			continue
-		}
+		/*for {*/
+			/*board.draw()*/
 
-		println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
+			/*var move, err = getMove()*/
+			/*if err != nil {*/
+				/*os.Exit(0)*/
+			/*}*/
 
-		for {
-			board.draw()
+			/*coords, err := parseMove(move)*/
+			/*if err != nil {*/
+				/*printError(err)*/
+				/*continue*/
+			/*}*/
 
-			var move, err = getMove()
-			if err != nil {
-				os.Exit(0)
-			}
+			/*result, err := board.makeMove(coords, ownChar)*/
+			/*if err != nil {*/
+				/*printError(err)*/
+				/*continue*/
+			/*}*/
+			/*checkResult(result)*/
 
-			coords, err := parseMove(move)
-			if err != nil {
-				printError(err)
-				continue
-			}
-
-			result, err := board.makeMove(coords, ownChar)
-			if err != nil {
-				printError(err)
-				continue
-			}
-			checkResult(result)
-
-			break
-		}
-	}
+			/*break*/
+		/*}*/
+	/*}*/
 }

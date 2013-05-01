@@ -39,6 +39,7 @@ func mapChar(char int) int {
 type Board struct {
 	b         [3][3]int
 	freeCells int
+	gameResult int
 }
 
 func NewBoard() *Board {
