@@ -78,6 +78,8 @@ type Cmd struct {
 	payload interface{}
 }
 
+var board *Board
+
 func main() {
 	flag.Parse()
 
@@ -93,7 +95,7 @@ func main() {
 	}
 
 	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
-	var board = NewBoard()
+	board = NewBoard()
 
 	rand.Seed(time.Now().Unix())
 
@@ -151,9 +153,10 @@ func main() {
 					continue
 				}
 
-				responseChan <- Cmd{1, result}
+				responseChan <- Cmd{1, TurnData{coords, result}}
 				break
 			}
+			board.draw()
 
 		case kCmdWaitForOpponent:
 			println("Waiting for opponent...")

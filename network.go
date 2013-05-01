@@ -16,6 +16,8 @@ const RANDOM_TRIES = 10
 const (
 	kStateWaitForTurnNegotiation = iota
 	kStateStartTurnNegotiation
+	kStateMyTurn
+	kStateHisTurn
 )
 
 const (
@@ -129,14 +131,65 @@ func connectToServer(address string) (cmdChan chan int, responseChan chan Cmd, e
 
 /// Common
 
+type TurnData struct {
+	Coords [2]int
+	Result int
+}
+
 func handleConnection(conn net.Conn, cmdChan chan int, responseChan chan Cmd, state int) {
 	// We expect only two possible states at first
-	firstPlayer, newState := negotiateTurn(conn, state)
-	println(firstPlayer)
+	var firstPlayer int
+	if state == kStateStartTurnNegotiation {
+		firstPlayer = negotiateTurn(conn)
+	} else if state == kStateWaitForTurnNegotiation {
+		firstPlayer = validateTurn(conn)
+	} else {
+		panic(fmt.Sprintf("Unexpected state: %v", state))
+	}
+
+	if firstPlayer == 0 {
+		ownChar, oppChar = 'X', 'O'
+		state = kStateMyTurn
+	} else {
+		ownChar, oppChar = 'O', 'X'
+		state = kStateHisTurn
+	}
 
 	// The game has started
+	fmt.Printf("The game has started: %v\n", firstPlayer)
 	for {
-		switch newState {
+		switch state {
+		case kStateMyTurn:
+			cmdChan <- kCmdMakeTurn
+			var cmd = <-responseChan
+			var turn = cmd.payload.(TurnData)
+			if turn.Result > GameFinished {
+				panic("GAME FINISHED")
+			}
+			if turn.Result != OKMove {
+				panic(fmt.Sprintf("Unexpected result %v", turn.Result))
+			}
+
+			sendMessage(conn, "turn", turn)
+			cmdChan <- kCmdWaitForOpponent
+			state = kStateHisTurn
+
+		case kStateHisTurn:
+			var turn TurnData
+			expectMessage(conn, "turn", &turn)
+
+			// Validate peer's move
+			result, err := board.makeMove(turn.Coords, oppChar)
+			if err != nil {
+				printError(err)
+				panic(err)
+			}
+
+			if result != turn.Result {
+				sendMessage(conn, "fatal", "Mismatching turn result")
+			}
+
+			state = kStateMyTurn
 		}
 	}
 }
@@ -153,44 +206,12 @@ func serialize(msg string, obj interface{}) []byte {
 	return buf.Bytes()
 }
 
-func deserialize(r io.Reader) interface{} {
-	var byteBuf = make([]byte, 1)
-	var buf []byte
-	var msg string
-	for {
-		_, err := r.Read(byteBuf)
-		if err != nil {
-			panic(err)
-		}
-		b := byteBuf[0]
-		if b == ';' {
-			msg = string(buf)
-			break
-		}
-		buf = append(buf, b)
-	}
-	fmt.Println("Got message: ", msg)
-
+func deserialize(r io.Reader, value interface{}) {
 	var dec = gob.NewDecoder(r)
-	switch msg {
-	case "timestamp":
-		var val int64
-		err := dec.Decode(&val)
-		if err != nil {
-			panic(err)
-		}
-		return val
-
-	case "firstPlayer":
-		var val int
-		err := dec.Decode(&val)
-		if err != nil {
-			panic(err)
-		}
-		return val
+	err := dec.Decode(value)
+	if err != nil {
+		panic(err)
 	}
-
-	return nil
 }
 
 func writeObj(conn net.Conn, msg string, obj interface{}) (err error) {
@@ -204,60 +225,92 @@ func writeObj(conn net.Conn, msg string, obj interface{}) (err error) {
 	return
 }
 
-func readObj(conn net.Conn) (obj interface{}, err error) {
-	return deserialize(conn), nil
+func sendMessage(conn net.Conn, msg string, value interface{}) {
+	fmt.Printf(">> Sending message (%v, %v)\n", msg, value)
+
+	err := writeObj(conn, msg, value)
+	if err != nil {
+		panic(err)
+	}
 }
 
-func negotiateTurn(conn net.Conn, state int) (int, int) {
+func receiveMessage(conn net.Conn) string {
+	var byteBuf = make([]byte, 1)
+	var buf []byte
+	var msg string
 	for {
-		switch state {
-		case kStateStartTurnNegotiation:
-			println("kStateStartTurnNegotiation")
-			var timestamp = time.Now().Unix()
-			println("timestamp =", timestamp)
-			err := writeObj(conn, "timestamp", timestamp)
-			if err != nil {
-				panic(err)
-			}
-
-			data, err := readObj(conn)
-			if err != nil {
-				panic(err)
-			}
-
-			if firstPlayer, ok := data.(int); ok {
-				println("firstPlayer:", firstPlayer)
-			} else {
-				panic(fmt.Sprintf("Received invalid data: %v %T", data, data))
-			}
-			state = kStateWaitForTurnNegotiation
-
-		case kStateWaitForTurnNegotiation:
-			println("kStateWaitForTurnNegotiation")
-			data, err := readObj(conn)
-			if err != nil {
-				panic(err)
-			}
-			println("Received data", data)
-
-			if timestamp, ok := data.(int64); ok {
-				mytime := time.Now().Unix()
-				if abs(mytime - timestamp) < 1 {
-					println("Good timestamp")
-					// good value
-					rand.Seed(int64(timestamp))
-					var turn = rand.Intn(2)
-					writeObj(conn, "firstPlayer", turn)
-				} else {
-					println("Bad timestamp")
-					writeObj(conn, "fatal", "bad timestamp")
-				}
-			} else {
-				panic("Received invalid timestamp")
-			}
+		_, err := conn.Read(byteBuf)
+		if err != nil {
+			panic(err)
 		}
+		b := byteBuf[0]
+		if b == ';' {
+			msg = string(buf)
+			break
+		}
+		buf = append(buf, b)
 	}
-	return 0, 0
+	fmt.Println(">> Received message: ", msg)
+	return msg
+}
+
+func expectMessage(conn net.Conn, expectedMsg string, value interface{}) {
+	msg := receiveMessage(conn)
+	if msg != expectedMsg {
+		panic(fmt.Sprintf("Unexpected message %v", msg))
+	}
+
+	deserialize(conn, value)
+}
+
+func invertPlayer(player int) int {
+	return 1 - player
+}
+
+func negotiateTurn(conn net.Conn) int {
+	println("kStateStartTurnNegotiation")
+
+	var timestamp = time.Now().Unix()
+	sendMessage(conn, "timestamp", timestamp)
+
+	//msg, value := receiveMessage(conn)
+	var otherFirstPlayer int
+	expectMessage(conn, "firstPlayer", &otherFirstPlayer)
+
+	println("Other first player = ", otherFirstPlayer)
+	rand.Seed(timestamp)
+	var firstPlayer = rand.Intn(2)
+	if firstPlayer != otherFirstPlayer {
+		sendMessage(conn, "fatal", "Mismatching first player")
+		panic("Mismatching first player")
+	}
+
+	// Confirm chosen first player
+	sendMessage(conn, "firstPlayer", firstPlayer)
+	return invertPlayer(firstPlayer)
+}
+
+func validateTurn(conn net.Conn) int {
+	var timestamp int64
+	expectMessage(conn, "timestamp", &timestamp)
+
+	mytime := time.Now().Unix()
+	if abs(mytime - timestamp) > 1 {
+		println("Bad timestamp")
+		sendMessage(conn, "fatal", "bad timestamp")
+		panic("bad timestamp")
+	}
+
+	rand.Seed(int64(timestamp))
+	var turn = rand.Intn(2)
+	sendMessage(conn, "firstPlayer", turn)
+	var otherTurn int
+	expectMessage(conn, "firstPlayer", &otherTurn)
+	if turn != otherTurn {
+		sendMessage(conn, "fatal", "Mismatching first player")
+		panic("Mismatching first player")
+	}
+	return turn
 }
 
 func abs(x int64) int64 {
