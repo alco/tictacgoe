@@ -1,10 +1,14 @@
 package main
 
 import (
-	"bufio"
+	"bytes"
+	"encoding/gob"
 	"errors"
+	"fmt"
+	"io"
 	"math/rand"
 	"net"
+	"time"
 )
 
 const RANDOM_TRIES = 10
@@ -137,40 +141,81 @@ func handleConnection(conn net.Conn, cmdChan chan int, responseChan chan Cmd, st
 	}
 }
 
-func serialize(obj interface{}) []byte {
-	var data = make([]byte, 0)
-	return data
+func serialize(msg string, obj interface{}) []byte {
+	var buf = new(bytes.Buffer)
+	buf.WriteString(msg)
+	buf.WriteByte(';')
+	var enc = gob.NewEncoder(buf)
+	err := enc.Encode(obj)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
 }
 
-func deserialize(str string) interface{} {
-	var obj = struct{}{}
-	return obj
+func deserialize(r io.Reader) interface{} {
+	var byteBuf = make([]byte, 1)
+	var buf []byte
+	var msg string
+	for {
+		_, err := r.Read(byteBuf)
+		if err != nil {
+			panic(err)
+		}
+		b := byteBuf[0]
+		if b == ';' {
+			msg = string(buf)
+			break
+		}
+		buf = append(buf, b)
+	}
+	fmt.Println("Got message: ", msg)
+
+	var dec = gob.NewDecoder(r)
+	switch msg {
+	case "timestamp":
+		var val int64
+		err := dec.Decode(&val)
+		if err != nil {
+			panic(err)
+		}
+		return val
+
+	case "firstPlayer":
+		var val int
+		err := dec.Decode(&val)
+		if err != nil {
+			panic(err)
+		}
+		return val
+	}
+
+	return nil
 }
 
-func writeObj(conn net.Conn, obj interface{}) (err error) {
-	var data = serialize(obj)
+func writeObj(conn net.Conn, msg string, obj interface{}) (err error) {
+	var data = serialize(msg, obj)
 	nbytes, err := conn.Write(data)
 	if err == nil && nbytes != len(data) {
 		err = errors.New("Couldn't write all bytes")
+	} else {
+		fmt.Println("Written btyes: ", nbytes)
 	}
 	return
 }
 
 func readObj(conn net.Conn) (obj interface{}, err error) {
-	var rd = bufio.NewReader(conn)
-	str, err := rd.ReadString('\n')
-	if err == nil {
-		obj = deserialize(str)
-	}
-	return
+	return deserialize(conn), nil
 }
 
 func negotiateTurn(conn net.Conn, state int) (int, int) {
 	for {
 		switch state {
 		case kStateStartTurnNegotiation:
-			var nums = genNums()
-			err := writeObj(conn, nums)
+			println("kStateStartTurnNegotiation")
+			var timestamp = time.Now().Unix()
+			println("timestamp =", timestamp)
+			err := writeObj(conn, "timestamp", timestamp)
 			if err != nil {
 				panic(err)
 			}
@@ -180,15 +225,44 @@ func negotiateTurn(conn net.Conn, state int) (int, int) {
 				panic(err)
 			}
 
-			if serverNums, ok := data.([]int); ok {
-				println(serverNums)
+			if firstPlayer, ok := data.(int); ok {
+				println("firstPlayer:", firstPlayer)
 			} else {
-				panic("Received invalid data")
+				panic(fmt.Sprintf("Received invalid data: %v %T", data, data))
 			}
 			state = kStateWaitForTurnNegotiation
+
 		case kStateWaitForTurnNegotiation:
-			// waiting
+			println("kStateWaitForTurnNegotiation")
+			data, err := readObj(conn)
+			if err != nil {
+				panic(err)
+			}
+			println("Received data", data)
+
+			if timestamp, ok := data.(int64); ok {
+				mytime := time.Now().Unix()
+				if abs(mytime - timestamp) < 1 {
+					println("Good timestamp")
+					// good value
+					rand.Seed(int64(timestamp))
+					var turn = rand.Intn(2)
+					writeObj(conn, "firstPlayer", turn)
+				} else {
+					println("Bad timestamp")
+					writeObj(conn, "fatal", "bad timestamp")
+				}
+			} else {
+				panic("Received invalid timestamp")
+			}
 		}
 	}
 	return 0, 0
+}
+
+func abs(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
