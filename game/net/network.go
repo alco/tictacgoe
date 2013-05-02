@@ -251,7 +251,7 @@ func (n *Net) handleConnection() {
 					n.castCommand(CmdGameFinished)
 					return
 				} else {
-					n.fatal("Could not agree on game result")
+					n.fatal("Could not agree on game result: our %v", result)
 				}
 			}
 			state = kStateMyTurn
@@ -262,7 +262,7 @@ func (n *Net) handleConnection() {
 
 			if result != n.FinalResult() {
 				n.sendMessage(kMessageWinStatusConfirm, false)
-				n.fatal("Failed to agree on final result")
+				n.fatal("Failed to agree on final result: our %v vs their %v", n.FinalResult(), result)
 			} else {
 				n.sendMessage(kMessageWinStatusConfirm, true)
 				n.castCommand(CmdGameFinished)

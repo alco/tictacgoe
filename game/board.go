@@ -126,6 +126,7 @@ func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 			b.finalResult = result
 			return result, nil
 		} else if b.freeCells == 0 {
+			b.finalResult = Draw
 			return Draw, nil
 		}
 		return OKMove, nil
