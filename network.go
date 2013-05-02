@@ -44,9 +44,9 @@ type Net struct {
 	*Board
 	GameResult int
 
-	conn net.Conn
-	firstPlayer int
-	cmdChan     chan int
+	conn         net.Conn
+	firstPlayer  int
+	cmdChan      chan int
 	responseChan chan Cmd
 }
 
@@ -121,7 +121,7 @@ func (n *Net) checkResult(result int) bool {
 		if result == Draw {
 			n.GameResult = kGameResultDraw
 		} else if (result == Player1Win && n.firstPlayer == 0) ||
-		(result == Player2Win && n.firstPlayer == 1) {
+			(result == Player2Win && n.firstPlayer == 1) {
 			n.GameResult = kGameResultMeWin
 		} else {
 			n.GameResult = kGameResultHeWin
@@ -312,7 +312,7 @@ func (n *Net) validateTurn() int {
 	n.expectMessage("timestamp", &timestamp)
 
 	mytime := time.Now().Unix()
-	if abs(mytime - timestamp) > 1 {
+	if abs(mytime-timestamp) > 1 {
 		println("Bad timestamp")
 		n.sendMessage("fatal", "bad timestamp")
 		panic("bad timestamp")

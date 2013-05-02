@@ -29,8 +29,8 @@ func mapChar(char int) int {
 }
 
 type Board struct {
-	b         [3][3]int
-	freeCells int
+	b           [3][3]int
+	freeCells   int
 	finalResult int
 	ownChar     int
 	oppChar     int
