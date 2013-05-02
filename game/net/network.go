@@ -46,6 +46,11 @@ type cmdStruct struct {
 // Supported messages
 const (
 	kMessageTurn = "turn"
+	kMessageFatal = "fatal"
+	kMessageWinStatus = "winstatus"
+	kMessageWinStatusConfirm = "winstatusConfirmation"
+	kMessageTimestamp = "timestamp"
+	kMessageFirstPlayer = "firstPlayer"
 )
 
 // Message format for kMessageTurn
@@ -98,11 +103,15 @@ func (n *Net) castCommand(cmd int) {
 
 /// Error handling
 
-func (n *Net) fatal(val interface{}) {
+func (n *Net) fatal(val interface{}, args ...interface{}) {
 	var err error
 	switch val.(type) {
 	case string:
-		err = errors.New(val.(string))
+		if len(args) > 0 {
+			err = errors.New(fmt.Sprintf(val.(string), args...))
+		} else {
+			err = errors.New(val.(string))
+		}
 	case error:
 		err = val.(error)
 	}
@@ -111,7 +120,7 @@ func (n *Net) fatal(val interface{}) {
 }
 
 func (n *Net) fatalSend(errMsg string) {
-	n.sendMessage("fatal", errMsg)
+	n.sendMessage(kMessageFatal, errMsg)
 	n.conn.Close()
 
 	var err = errors.New(errMsg)
@@ -221,7 +230,7 @@ func (n *Net) handleConnection() {
 			// Validate peer's move
 			result, err := n.MakeOppMove(turn.Coords)
 			if err != nil {
-				n.fatal(fmt.Sprintf("Invalid move received from peer: %v", err))
+				n.fatal("Invalid move received from peer: %v", err)
 			}
 
 			// Sanity check against cheating
@@ -233,10 +242,10 @@ func (n *Net) handleConnection() {
 			if gameFinished {
 				// Confirm game result with the peer
 
-				n.sendMessage("winstatus", result)
+				n.sendMessage(kMessageWinStatus, result)
 
 				var resultsMatch bool
-				n.expectMessage("winstatusConfirmation", &resultsMatch)
+				n.expectMessage(kMessageWinStatusConfirm, &resultsMatch)
 
 				if resultsMatch {
 					n.castCommand(CmdGameFinished)
@@ -249,13 +258,13 @@ func (n *Net) handleConnection() {
 
 		case kStateWaitForResultConfirmation:
 			var result int
-			n.expectMessage("winstatus", &result)
+			n.expectMessage(kMessageWinStatus, &result)
 
 			if result != n.FinalResult() {
-				n.sendMessage("winstatusConfirmation", false)
+				n.sendMessage(kMessageWinStatusConfirm, false)
 				n.fatal("Failed to agree on final result")
 			} else {
-				n.sendMessage("winstatusConfirmation", true)
+				n.sendMessage(kMessageWinStatusConfirm, true)
 				n.castCommand(CmdGameFinished)
 			}
 			return
@@ -268,7 +277,7 @@ func (n *Net) sendMessage(msg string, value interface{}) {
 
 	err := writeValue(n.conn, msg, value)
 	if err != nil {
-		n.fatal(fmt.Sprintf("Failed to send message: %v", err))
+		n.fatal("Failed to send message: %v", err)
 	}
 }
 
@@ -302,18 +311,18 @@ func (n *Net) expectMessage(expectedMsg string, value interface{}) {
 		var errString string
 		err = readValue(n.conn, &errString)
 		if err != nil {
-			n.fatal(fmt.Sprintf("Could not process fatal error from the peer: %v", errString))
+			n.fatal("Could not process fatal error from the peer: %v", errString)
 		}
-		n.fatal(fmt.Sprintf("Got fatal error from the peer: %v", errString))
+		n.fatal("Got fatal error from the peer: %v", errString)
 	}
 
 	if msg != expectedMsg {
-		n.fatal(fmt.Sprintf("Unexpected message %v", msg))
+		n.fatal("Unexpected message %v", msg)
 	}
 
 	err = readValue(n.conn, value)
 	if err != nil {
-		n.fatal(fmt.Sprintf("Could not read received value: %v", err))
+		n.fatal("Could not read received value: %v", err)
 	}
 }
 
@@ -321,10 +330,10 @@ func (n *Net) expectMessage(expectedMsg string, value interface{}) {
 // RNG
 func (n *Net) negotiateTurn() int {
 	var timestamp = time.Now().Unix()
-	n.sendMessage("timestamp", timestamp)
+	n.sendMessage(kMessageTimestamp, timestamp)
 
 	var otherFirstPlayer int
-	n.expectMessage("firstPlayer", &otherFirstPlayer)
+	n.expectMessage(kMessageFirstPlayer, &otherFirstPlayer)
 
 	rand.Seed(timestamp)
 	var firstPlayer = rand.Intn(2)
@@ -333,7 +342,7 @@ func (n *Net) negotiateTurn() int {
 	}
 
 	// Confirm chosen first player
-	n.sendMessage("firstPlayer", firstPlayer)
+	n.sendMessage(kMessageFirstPlayer, firstPlayer)
 	return invertPlayer(firstPlayer)
 }
 
@@ -341,7 +350,7 @@ func (n *Net) negotiateTurn() int {
 // first player based on it
 func (n *Net) validateTurn() int {
 	var timestamp int64
-	n.expectMessage("timestamp", &timestamp)
+	n.expectMessage(kMessageTimestamp, &timestamp)
 
 	mytime := time.Now().Unix()
 	if abs(mytime-timestamp) > 1 {
@@ -350,11 +359,11 @@ func (n *Net) validateTurn() int {
 
 	rand.Seed(timestamp)
 	var firstPlayer = rand.Intn(2)
-	n.sendMessage("firstPlayer", firstPlayer)
+	n.sendMessage(kMessageFirstPlayer, firstPlayer)
 
 	// Confirm chosen first player with the peer
 	var otherFirstPlayer int
-	n.expectMessage("firstPlayer", &otherFirstPlayer)
+	n.expectMessage(kMessageFirstPlayer, &otherFirstPlayer)
 	if firstPlayer != otherFirstPlayer {
 		n.fatalSend("Mismatching first player")
 	}
