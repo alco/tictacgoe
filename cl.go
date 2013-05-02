@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"tictacgoe/game"
-	gamenet "tictacgoe/game/net"
+	"tictacgoe/game/net"
 )
 
 // Wrap os.Stdin to conveniently read strings
@@ -136,6 +136,11 @@ func runCommandLine() {
 
 	for {
 		switch <-net.Commands {
+		case gamenet.CmdHandleError:
+			err = net.Error()
+			printError(err)
+			os.Exit(1)
+
 		case gamenet.CmdMakeTurn:
 			println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
 

@@ -1,4 +1,4 @@
-package net
+package gamenet
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"runtime"
 	"time"
 
 	"tictacgoe/game"
@@ -26,6 +27,7 @@ const (
 	CmdWaitForOpponent
 	CmdWaitForResultConfirmation
 	CmdGameFinished
+	CmdHandleError
 )
 
 // The final outcome of a match
@@ -60,6 +62,7 @@ type Net struct {
 	conn         net.Conn
 	firstPlayer  int
 	responseChan chan cmdStruct
+	lastError    error
 }
 
 func NewNet() *Net {
@@ -76,6 +79,10 @@ func (n *Net) SendResponse(msgType int, payload interface{}) {
 	n.responseChan <- cmdStruct{msgType, payload}
 }
 
+func (n *Net) Error() error {
+	return n.lastError
+}
+
 // Communicating with a client
 
 // Sync call
@@ -87,6 +94,28 @@ func (n *Net) callCommand(cmd int) cmdStruct {
 // Async call
 func (n *Net) castCommand(cmd int) {
 	n.Commands <- cmd
+}
+
+/// Error handling
+
+func (n *Net) fatal(val interface{}) {
+	var err error
+	switch val.(type) {
+	case string:
+		err = errors.New(val.(string))
+	case error:
+		err = val.(error)
+	}
+	n.conn.Close()
+	panic(err) // this panic will be caught in handleConnection (unless it's a runtime error)
+}
+
+func (n *Net) fatalSend(errMsg string) {
+	n.sendMessage("fatal", errMsg)
+	n.conn.Close()
+
+	var err = errors.New(errMsg)
+	panic(err) // this panic will be caught in handleConnection (unless it's a runtime error)
 }
 
 /// Establishing a connection
@@ -145,6 +174,18 @@ func (n *Net) checkResult(result int) bool {
 // Run loop of our program. Handles communication with the other peer and with
 // the view module (for querying user input and display game progress)
 func (n *Net) handleConnection() {
+	// Trap all panics except runtime errors
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(runtime.Error); ok {
+				panic(r)
+			}
+
+			n.lastError = r.(error)
+			n.castCommand(CmdHandleError)
+		}
+	}()
+
 	n.Board.SetFirstPlayer(n.firstPlayer)
 
 	var state int
@@ -180,13 +221,12 @@ func (n *Net) handleConnection() {
 			// Validate peer's move
 			result, err := n.MakeOppMove(turn.Coords)
 			if err != nil {
-				panic(err)
+				n.fatal(fmt.Sprintf("Invalid move received from peer: %v", err))
 			}
 
 			// Sanity check against cheating
 			if result != turn.Result {
-				n.sendMessage("fatal", "Mismatching turn result")
-				panic("Mismatching turn result")
+				n.fatalSend("Mismatching turn result")
 			}
 
 			var gameFinished = n.checkResult(result)
@@ -202,7 +242,7 @@ func (n *Net) handleConnection() {
 					n.castCommand(CmdGameFinished)
 					return
 				} else {
-					panic("Could not agree on game result")
+					n.fatal("Could not agree on game result")
 				}
 			}
 			state = kStateMyTurn
@@ -213,7 +253,7 @@ func (n *Net) handleConnection() {
 
 			if result != n.FinalResult() {
 				n.sendMessage("winstatusConfirmation", false)
-				panic("Failed to agree on final result")
+				n.fatal("Failed to agree on final result")
 			} else {
 				n.sendMessage("winstatusConfirmation", true)
 				n.castCommand(CmdGameFinished)
@@ -228,18 +268,18 @@ func (n *Net) sendMessage(msg string, value interface{}) {
 
 	err := writeValue(n.conn, msg, value)
 	if err != nil {
-		panic(err)
+		n.fatal(fmt.Sprintf("Failed to send message: %v", err))
 	}
 }
 
-func (n *Net) receiveMessage() string {
+func (n *Net) receiveMessage() (string, error) {
 	var byteBuf = make([]byte, 1)
 	var buf []byte
 	var msg string
 	for {
 		_, err := n.conn.Read(byteBuf)
 		if err != nil {
-			panic(err)
+			return "", err
 		}
 		b := byteBuf[0]
 		if b == ';' {
@@ -249,16 +289,32 @@ func (n *Net) receiveMessage() string {
 		buf = append(buf, b)
 	}
 	/*fmt.Println(">> Received message: ", msg)*/
-	return msg
+	return msg, nil
 }
 
 func (n *Net) expectMessage(expectedMsg string, value interface{}) {
-	msg := n.receiveMessage()
-	if msg != expectedMsg {
-		panic(fmt.Sprintf("Unexpected message %v", msg))
+	msg, err := n.receiveMessage()
+	if err != nil {
+		n.fatal(err)
 	}
 
-	readValue(n.conn, value)
+	if msg == "fatal" {
+		var errString string
+		err = readValue(n.conn, &errString)
+		if err != nil {
+			n.fatal(fmt.Sprintf("Could not process fatal error from the peer: %v", errString))
+		}
+		n.fatal(fmt.Sprintf("Got fatal error from the peer: %v", errString))
+	}
+
+	if msg != expectedMsg {
+		n.fatal(fmt.Sprintf("Unexpected message %v", msg))
+	}
+
+	err = readValue(n.conn, value)
+	if err != nil {
+		n.fatal(fmt.Sprintf("Could not read received value: %v", err))
+	}
 }
 
 // Validate our timestamp with the peer, then use it as a seed value for the
@@ -273,8 +329,7 @@ func (n *Net) negotiateTurn() int {
 	rand.Seed(timestamp)
 	var firstPlayer = rand.Intn(2)
 	if firstPlayer != otherFirstPlayer {
-		n.sendMessage("fatal", "Mismatching first player")
-		panic("Mismatching first player")
+		n.fatalSend("Mismatching first player")
 	}
 
 	// Confirm chosen first player
@@ -290,8 +345,7 @@ func (n *Net) validateTurn() int {
 
 	mytime := time.Now().Unix()
 	if abs(mytime-timestamp) > 1 {
-		n.sendMessage("fatal", "bad timestamp")
-		panic("bad timestamp")
+		n.fatalSend("bad timestamp")
 	}
 
 	rand.Seed(timestamp)
@@ -302,8 +356,7 @@ func (n *Net) validateTurn() int {
 	var otherFirstPlayer int
 	n.expectMessage("firstPlayer", &otherFirstPlayer)
 	if firstPlayer != otherFirstPlayer {
-		n.sendMessage("fatal", "Mismatching first player")
-		panic("Mismatching first player")
+		n.fatalSend("Mismatching first player")
 	}
 	return firstPlayer
 }
@@ -324,26 +377,27 @@ func invertPlayer(player int) int {
 }
 
 // Encode the value and send it to the peer
-func writeValue(conn net.Conn, msg string, obj interface{}) (err error) {
-	var data = serialize(msg, obj)
+func writeValue(conn net.Conn, msg string, obj interface{}) error {
+	var data, err = serialize(msg, obj)
+	if err != nil {
+		return err
+	}
 	nbytes, err := conn.Write(data)
 	if err == nil && nbytes != len(data) {
-		err = errors.New("Couldn't write all bytes")
+		return errors.New("Couldn't write all bytes")
 	}
-	return
+	return nil
 }
 
 // Read the encoded value from the reader and decode it
-func readValue(r io.Reader, value interface{}) {
+func readValue(r io.Reader, value interface{}) error {
 	var dec = gob.NewDecoder(r)
 	err := dec.Decode(value)
-	if err != nil {
-		panic(err)
-	}
+	return err
 }
 
 // Low-level encoding function
-func serialize(msg string, obj interface{}) []byte {
+func serialize(msg string, obj interface{}) ([]byte, error) {
 	// One packet has the following format:
 	// <message string>;<gob-encoded data>
 	var buf = new(bytes.Buffer)
@@ -352,7 +406,7 @@ func serialize(msg string, obj interface{}) []byte {
 	var enc = gob.NewEncoder(buf)
 	err := enc.Encode(obj)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return buf.Bytes()
+	return buf.Bytes(), nil
 }
