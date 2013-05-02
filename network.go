@@ -46,23 +46,19 @@ type Net struct {
 
 	conn         net.Conn
 	firstPlayer  int
-	cmdChan      chan int
+	Commands     chan int
 	responseChan chan Cmd
 }
 
 func NewNet() *Net {
 	var n Net
 	n.Board = NewBoard()
-	n.cmdChan = make(chan int)
+	n.Commands = make(chan int)
 	n.responseChan = make(chan Cmd)
 	return &n
 }
 
 // Interface for the client
-
-func (n *Net) GetCommand() int {
-	return <-n.cmdChan
-}
 
 func (n *Net) SendResponse(response Cmd) {
 	n.responseChan <- response
@@ -72,13 +68,13 @@ func (n *Net) SendResponse(response Cmd) {
 
 // Sync call
 func (n *Net) callCommand(cmd int) Cmd {
-	n.cmdChan <- cmd
+	n.Commands <- cmd
 	return <-n.responseChan
 }
 
 // Async call
 func (n *Net) castCommand(cmd int) {
-	n.cmdChan <- cmd
+	n.Commands <- cmd
 }
 
 // Establishing a connection

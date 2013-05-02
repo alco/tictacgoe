@@ -135,7 +135,7 @@ func runCommandLine() {
 	println("\n*** \x1b[7mGame started\x1b[0m ***")
 
 	for {
-		switch net.GetCommand() {
+		switch <-net.Commands {
 		case kCmdMakeTurn:
 			println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
 
