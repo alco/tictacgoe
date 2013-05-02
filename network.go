@@ -124,11 +124,12 @@ func handleConnection(conn net.Conn, cmdChan chan int, responseChan chan Cmd, fi
 				cmdChan <- kCmdWaitForResultConfirmation
 				state = kStateWaitForResultConfirmation
 			} else {
-				cmdChan <- kCmdWaitForOpponent
 				state = kStateHisTurn
 			}
 
 		case kStateHisTurn:
+			cmdChan <- kCmdWaitForOpponent
+
 			var turn TurnData
 			expectMessage(conn, "turn", &turn)
 

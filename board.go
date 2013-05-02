@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 )
 
 var ownChar, oppChar int
@@ -23,18 +22,6 @@ const (
 	MeWin
 	HeWin
 )
-
-func formatCell(char int) string {
-	var seq string
-	if char == oppChar {
-		seq = "\x1b[41m[%c]\x1b[0m"
-	} else if char == ownChar {
-		seq = "\x1b[7m[%c]\x1b[0m"
-	} else {
-		seq = "[%c]"
-	}
-	return fmt.Sprintf(seq, char)
-}
 
 func mapChar(char int) int {
 	if char == player1Char {
@@ -59,14 +46,6 @@ func NewBoard() *Board {
 	}
 	b.freeCells = 9
 	return &b
-}
-
-func (b *Board) draw() {
-	fmt.Printf("\n   1   2   3\na %s %s %s\nb %s %s %s\nc %s %s %s\n",
-		formatCell(b.b[0][0]), formatCell(b.b[0][1]), formatCell(b.b[0][2]),
-		formatCell(b.b[1][0]), formatCell(b.b[1][1]), formatCell(b.b[1][2]),
-		formatCell(b.b[2][0]), formatCell(b.b[2][1]), formatCell(b.b[2][2]))
-
 }
 
 func (b *Board) checkWinningCondition(coords [2]int) int {

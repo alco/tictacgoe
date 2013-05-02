@@ -71,6 +71,29 @@ func printError(err interface{}) {
 	fmt.Printf("\x1b[31m%v\x1b[0m\n", err)
 }
 
+// Helper function used by drawBoard
+func formatCell(char int) string {
+	var seq string
+	if char == oppChar {
+		seq = "\x1b[41m[%c]\x1b[0m"
+	} else if char == ownChar {
+		seq = "\x1b[7m[%c]\x1b[0m"
+	} else {
+		seq = "[%c]"
+	}
+	return fmt.Sprintf(seq, char)
+}
+
+// Format the current board state nicely
+func drawBoard(b *Board) {
+	fmt.Printf("\n   1   2   3\na %s %s %s\nb %s %s %s\nc %s %s %s\n",
+		formatCell(b.b[0][0]), formatCell(b.b[0][1]), formatCell(b.b[0][2]),
+		formatCell(b.b[1][0]), formatCell(b.b[1][1]), formatCell(b.b[1][2]),
+		formatCell(b.b[2][0]), formatCell(b.b[2][1]), formatCell(b.b[2][2]))
+
+}
+
+
 
 type Cmd struct {
 	msgType int
@@ -120,14 +143,7 @@ func main() {
 		}
 	}
 
-	/*var myTurn bool*/
-	/*if firstPlayer == 1 {*/
-		/*ownChar, oppChar = 'X', 'O'*/
-		/*myTurn = true*/
-	/*} else {*/
-		/*ownChar, oppChar = 'O', 'X'*/
-		/*myTurn = false*/
-	/*}*/
+	println("*** \x1b[7mGame started\x1b[0m ***")
 
 	for {
 		switch <-cmdChan {
@@ -135,7 +151,7 @@ func main() {
 			println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
 
 			for {
-				board.draw()
+				drawBoard(board)
 
 				var move, err = getMove()
 				if err != nil {
@@ -157,69 +173,28 @@ func main() {
 				responseChan <- Cmd{1, TurnData{coords, result}}
 				break
 			}
-			board.draw()
 
 		case kCmdWaitForOpponent:
+			drawBoard(board)
 			println("Waiting for opponent...")
 
 		case kCmdWaitForResultConfirmation:
+			drawBoard(board)
 			println("Waiting for game result confirmation with the peer...")
 
 		case kCmdGameFinished:
-			var result = board.gameResult
-
-			board.draw()
+			drawBoard(board)
 			println()
-			switch result {
+
+			switch board.gameResult {
 			case Draw:
-				fmt.Println("*** \x1b[7mIt's a draw\x1b[0m ***")
+				println("*** \x1b[7mIt's a draw\x1b[0m ***")
 			case MeWin:
-				fmt.Println("*** \x1b[42m\x1b[30mYou win!\x1b[0m ***")
+				println("*** \x1b[42m\x1b[30mYou win!\x1b[0m ***")
 			case HeWin:
-				fmt.Println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
+				println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
 			}
 			os.Exit(0)
 		}
 	}
-
-	/////////////////////////////////////////////////////////////////////
-
-	/*for {*/
-		/*if !myTurn {*/
-			/*println("Waiting for opponent...")*/
-			/*result, err := board.waitForOpponent()*/
-			/*if err != nil {*/
-				/*printError(err)*/
-				/*os.Exit(0)*/
-			/*}*/
-			/*checkResult(result)*/
-			/*continue*/
-		/*}*/
-
-		/*println("\n<<< \x1b[1mYour turn\x1b[0m >>>")*/
-
-		/*for {*/
-			/*board.draw()*/
-
-			/*var move, err = getMove()*/
-			/*if err != nil {*/
-				/*os.Exit(0)*/
-			/*}*/
-
-			/*coords, err := parseMove(move)*/
-			/*if err != nil {*/
-				/*printError(err)*/
-				/*continue*/
-			/*}*/
-
-			/*result, err := board.makeMove(coords, ownChar)*/
-			/*if err != nil {*/
-				/*printError(err)*/
-				/*continue*/
-			/*}*/
-			/*checkResult(result)*/
-
-			/*break*/
-		/*}*/
-	/*}*/
 }
