@@ -153,7 +153,7 @@ func runCommandLine() {
 					continue
 				}
 
-				result, err := net.Board.makeMove(coords, net.Board.ownChar)
+				result, err := net.Board.makeOwnMove(coords)
 				if err != nil {
 					printError(err)
 					continue

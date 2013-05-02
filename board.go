@@ -47,6 +47,14 @@ func NewBoard() *Board {
 	return &b
 }
 
+func (b *Board) SetFirstPlayer(firstPlayer int) {
+	if firstPlayer == 0 {
+		b.ownChar, b.oppChar = Player1Char, Player2Char
+	} else {
+		b.ownChar, b.oppChar = Player2Char, Player1Char
+	}
+}
+
 func (b *Board) checkWinningCondition(coords [2]int) int {
 	var i, j = coords[0], coords[1]
 	var char int
@@ -79,6 +87,14 @@ func (b *Board) checkWinningCondition(coords [2]int) int {
 	}
 
 	return 0
+}
+
+func (b *Board) makeOwnMove(coords [2]int) (int, error) {
+	return b.makeMove(coords, b.ownChar)
+}
+
+func (b *Board) makeOppMove(coords [2]int) (int, error) {
+	return b.makeMove(coords, b.oppChar)
 }
 
 func (b *Board) makeMove(coords [2]int, char int) (int, error) {

@@ -129,11 +129,10 @@ func (n *Net) checkResult(result int) bool {
 
 func (n *Net) handleConnection() {
 	var state int
+	n.Board.SetFirstPlayer(n.firstPlayer)
 	if n.firstPlayer == 0 {
-		n.Board.ownChar, n.Board.oppChar = Player1Char, Player2Char
 		state = kStateMyTurn
 	} else {
-		n.Board.ownChar, n.Board.oppChar = Player2Char, Player1Char
 		state = kStateHisTurn
 	}
 
@@ -165,7 +164,7 @@ func (n *Net) handleConnection() {
 			n.expectMessage("turn", &turn)
 
 			// Validate peer's move
-			result, err := n.Board.makeMove(turn.Coords, n.Board.oppChar)
+			result, err := n.Board.makeOppMove(turn.Coords)
 			if err != nil {
 				printError(err)
 				panic(err)
