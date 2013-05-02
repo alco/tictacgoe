@@ -6,15 +6,22 @@ import (
 )
 
 var ownChar, oppChar int
+const (
+	player1Char = 'X'
+	player2Char = 'O'
+)
 
 const (
 	NoMove = iota
 	OKMove
 
 	GameFinished
+	Player1Win
+	Player2Win
+	Draw
+
 	MeWin
 	HeWin
-	Draw
 )
 
 func formatCell(char int) string {
@@ -30,16 +37,17 @@ func formatCell(char int) string {
 }
 
 func mapChar(char int) int {
-	if char == ownChar {
-		return MeWin
+	if char == player1Char {
+		return Player1Win
 	}
-	return HeWin
+	return Player2Win
 }
 
 type Board struct {
 	b         [3][3]int
 	freeCells int
 	gameResult int
+	finalResult int
 }
 
 func NewBoard() *Board {

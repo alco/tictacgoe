@@ -161,6 +161,9 @@ func main() {
 		case kCmdWaitForOpponent:
 			println("Waiting for opponent...")
 
+		case kCmdWaitForResultConfirmation:
+			println("Waiting for game result confirmation with the peer...")
+
 		case kCmdGameFinished:
 			var result = board.gameResult
 

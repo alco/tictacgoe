@@ -11,66 +11,24 @@ import (
 	"time"
 )
 
-const RANDOM_TRIES = 10
-
 const (
-	kStateWaitForTurnNegotiation = iota
-	kStateStartTurnNegotiation
-	kStateMyTurn
+	kStateMyTurn = iota
 	kStateHisTurn
+	kStateWaitForResultConfirmation
 )
 
 const (
 	kCmdMakeTurn = iota
 	kCmdWaitForOpponent
+	kCmdWaitForResultConfirmation
 	kCmdGameFinished
 )
-
-func genNums() []int {
-	nums := make([]int, RANDOM_TRIES)
-	for i := range nums {
-		nums[i] = 1 + rand.Int()%2 // 1 - my turn; 2 - his turn (server's point of view)
-	}
-	return nums
-}
-
-func getFirstPlayer(myNums []int, hisNums []int) int {
-	for i := range myNums {
-		var myNum, hisNum = myNums[i], hisNums[i]
-		if myNum == hisNum {
-			return myNum
-		}
-	}
-	return 0
-}
 
 type BoardNet struct {
 	*Board
 	firstPlayer int
 	comChan     chan int
 }
-
-/*func (b *BoardRPC) WhoseTurn(clientNums []int, result *[]int) error {*/
-	/*nums := genNums()*/
-	/*b.firstPlayer = getFirstPlayer(nums, clientNums)*/
-	/**result = nums*/
-
-	/*if b.firstPlayer == 0 {*/
-		/*panic("Not enough numbers :(")*/
-	/*}*/
-
-	/*return nil*/
-/*}*/
-
-/*func (b *BoardRPC) AgreeOnTurn(clientTurn int, result *bool) error {*/
-	/*if clientTurn == b.firstPlayer {*/
-		/**result = true*/
-		/*b.comChan <- b.firstPlayer*/
-	/*} else {*/
-		/*return errors.New("server: Could not agree on turn")*/
-	/*}*/
-	/*return nil*/
-/*}*/
 
 // Server
 func listen(b *Board) (cmdChan chan int, responseChan chan Cmd, err error) {
@@ -88,9 +46,11 @@ func listen(b *Board) (cmdChan chan int, responseChan chan Cmd, err error) {
 		return
 	}
 
+	var firstPlayer = validateTurn(conn)
+
 	cmdChan = make(chan int)
 	responseChan = make(chan Cmd)
-	go handleConnection(conn, cmdChan, responseChan, kStateWaitForTurnNegotiation)
+	go handleConnection(conn, cmdChan, responseChan, firstPlayer)
 
 	return
 }
@@ -102,31 +62,13 @@ func connectToServer(address string) (cmdChan chan int, responseChan chan Cmd, e
 		return
 	}
 
+	var firstPlayer = negotiateTurn(conn)
+
 	cmdChan = make(chan int)
 	responseChan = make(chan Cmd)
-	go handleConnection(conn, cmdChan, responseChan, kStateStartTurnNegotiation)
+	go handleConnection(conn, cmdChan, responseChan, firstPlayer)
 
 	return
-
-	/*var nums = genNums()*/
-	/*var serverNums []int*/
-	/*err = client.Call("BoardRPC.WhoseTurn", nums, &serverNums)*/
-	/*if err != nil {*/
-		/*panic(err)*/
-	/*}*/
-
-	/*var firstPlayer = getFirstPlayer(nums, serverNums)*/
-	/*var serverOK bool*/
-	/*err = client.Call("BoardRPC.AgreeOnTurn", firstPlayer, &serverOK)*/
-	/*if err != nil {*/
-		/*panic(err)*/
-	/*}*/
-
-	/*if !serverOK {*/
-		/*panic("Could not agree on turn")*/
-	/*}*/
-
-	/*return 3 - firstPlayer // First player is from the server's point of view*/
 }
 
 /// Common
@@ -136,17 +78,25 @@ type TurnData struct {
 	Result int
 }
 
-func handleConnection(conn net.Conn, cmdChan chan int, responseChan chan Cmd, state int) {
-	// We expect only two possible states at first
-	var firstPlayer int
-	if state == kStateStartTurnNegotiation {
-		firstPlayer = negotiateTurn(conn)
-	} else if state == kStateWaitForTurnNegotiation {
-		firstPlayer = validateTurn(conn)
-	} else {
-		panic(fmt.Sprintf("Unexpected state: %v", state))
+func checkResult(result int, firstPlayer int) bool {
+	if result > GameFinished {
+		if result == Draw {
+			board.gameResult = Draw
+		} else if result == Player1Win && firstPlayer == 0 {
+			board.gameResult = MeWin
+		} else if result == Player2Win && firstPlayer == 1 {
+			board.gameResult = MeWin
+		} else {
+			board.gameResult = HeWin
+		}
+		board.finalResult = result
+		return true
 	}
+	return false
+}
 
+func handleConnection(conn net.Conn, cmdChan chan int, responseChan chan Cmd, firstPlayer int) {
+	var state int
 	if firstPlayer == 0 {
 		ownChar, oppChar = 'X', 'O'
 		state = kStateMyTurn
@@ -163,16 +113,20 @@ func handleConnection(conn net.Conn, cmdChan chan int, responseChan chan Cmd, st
 			cmdChan <- kCmdMakeTurn
 			var cmd = <-responseChan
 			var turn = cmd.payload.(TurnData)
-			if turn.Result > GameFinished {
-				panic("GAME FINISHED")
-			}
-			if turn.Result != OKMove {
+			if turn.Result <= GameFinished && turn.Result != OKMove {
 				panic(fmt.Sprintf("Unexpected result %v", turn.Result))
 			}
 
 			sendMessage(conn, "turn", turn)
-			cmdChan <- kCmdWaitForOpponent
-			state = kStateHisTurn
+
+			var gameFinished = checkResult(turn.Result, firstPlayer)
+			if gameFinished {
+				cmdChan <- kCmdWaitForResultConfirmation
+				state = kStateWaitForResultConfirmation
+			} else {
+				cmdChan <- kCmdWaitForOpponent
+				state = kStateHisTurn
+			}
 
 		case kStateHisTurn:
 			var turn TurnData
@@ -189,7 +143,38 @@ func handleConnection(conn net.Conn, cmdChan chan int, responseChan chan Cmd, st
 				sendMessage(conn, "fatal", "Mismatching turn result")
 			}
 
+			var gameFinished = checkResult(result, firstPlayer)
+			if gameFinished {
+				// Confirm game result with the peer
+
+				/*cmdChan <- kCmdWaitForResultConfirmation*/
+				sendMessage(conn, "winstatus", result)
+
+				var resultsMatch bool
+				expectMessage(conn, "winstatusConfirmation", &resultsMatch)
+
+				if resultsMatch {
+					cmdChan <- kCmdGameFinished
+					return
+				} else {
+					panic("Could not agree on game result")
+				}
+			}
+
 			state = kStateMyTurn
+
+		case kStateWaitForResultConfirmation:
+			var result int
+			expectMessage(conn, "winstatus", &result)
+
+			if result != board.finalResult {
+				sendMessage(conn, "winstatusConfirmation", false)
+				panic("Failed to agree on final result")
+			} else {
+				sendMessage(conn, "winstatusConfirmation", true)
+				cmdChan <- kCmdGameFinished
+			}
+			return
 		}
 	}
 }
@@ -268,8 +253,6 @@ func invertPlayer(player int) int {
 }
 
 func negotiateTurn(conn net.Conn) int {
-	println("kStateStartTurnNegotiation")
-
 	var timestamp = time.Now().Unix()
 	sendMessage(conn, "timestamp", timestamp)
 
