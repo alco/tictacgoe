@@ -11,12 +11,14 @@ import (
 	"time"
 )
 
+// Possible state for the connection to be in
 const (
 	kStateMyTurn = iota
 	kStateHisTurn
 	kStateWaitForResultConfirmation
 )
 
+// Commands used for communication with the view module of the program
 const (
 	kCmdMakeTurn = iota
 	kCmdWaitForOpponent
@@ -24,17 +26,25 @@ const (
 	kCmdGameFinished
 )
 
+// The final outcome of a match
 const (
 	kGameResultDraw = iota
 	kGameResultMeWin
 	kGameResultHeWin
 )
 
+// Message format for exchange with the view module
 type Cmd struct {
 	msgType int
 	payload interface{}
 }
 
+// Supported messages
+const (
+	kMessageTurn = "turn"
+)
+
+// Message format for kMessageTurn
 type TurnData struct {
 	Coords [2]int
 	Result int
@@ -43,10 +53,10 @@ type TurnData struct {
 type Net struct {
 	*Board
 	GameResult int
+	Commands   chan int
 
 	conn         net.Conn
 	firstPlayer  int
-	Commands     chan int
 	responseChan chan Cmd
 }
 
@@ -77,10 +87,10 @@ func (n *Net) castCommand(cmd int) {
 	n.Commands <- cmd
 }
 
-// Establishing a connection
+/// Establishing a connection
 
-func (n *Net) Listen(port int) (err error) {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
+func (n *Net) Listen(address string) (err error) {
+	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return
 	}
@@ -112,6 +122,9 @@ func (n *Net) ConnectToServer(address string) (err error) {
 
 /// Common
 
+// When the game is finished, we set our local result value for the view to be
+// able to display it (since the view is not aware whether we are the first
+// player or second)
 func (n *Net) checkResult(result int) bool {
 	if result > GameFinished {
 		if result == Draw {
@@ -127,27 +140,26 @@ func (n *Net) checkResult(result int) bool {
 	return false
 }
 
+// Run loop of our program. Handles communication with the other peer and with
+// the view module (for querying user input and display game progress)
 func (n *Net) handleConnection() {
-	var state int
 	n.Board.SetFirstPlayer(n.firstPlayer)
+
+	var state int
 	if n.firstPlayer == 0 {
 		state = kStateMyTurn
 	} else {
 		state = kStateHisTurn
 	}
 
-	// The game has started
 	for {
 		switch state {
 		case kStateMyTurn:
+			// Get turn data from the view module
 			var cmd = n.callCommand(kCmdMakeTurn)
 
 			var turn = cmd.payload.(TurnData)
-			if turn.Result <= GameFinished && turn.Result != OKMove {
-				panic(fmt.Sprintf("Unexpected result %v", turn.Result))
-			}
-
-			n.sendMessage("turn", turn)
+			n.sendMessage(kMessageTurn, turn)
 
 			var gameFinished = n.checkResult(turn.Result)
 			if gameFinished {
@@ -161,7 +173,7 @@ func (n *Net) handleConnection() {
 			n.castCommand(kCmdWaitForOpponent)
 
 			var turn TurnData
-			n.expectMessage("turn", &turn)
+			n.expectMessage(kMessageTurn, &turn)
 
 			// Validate peer's move
 			result, err := n.Board.makeOppMove(turn.Coords)
@@ -170,8 +182,10 @@ func (n *Net) handleConnection() {
 				panic(err)
 			}
 
+			// Sanity check against cheating
 			if result != turn.Result {
 				n.sendMessage("fatal", "Mismatching turn result")
+				panic("Mismatching turn result")
 			}
 
 			var gameFinished = n.checkResult(result)
@@ -190,7 +204,6 @@ func (n *Net) handleConnection() {
 					panic("Could not agree on game result")
 				}
 			}
-
 			state = kStateMyTurn
 
 		case kStateWaitForResultConfirmation:
@@ -209,41 +222,10 @@ func (n *Net) handleConnection() {
 	}
 }
 
-func serialize(msg string, obj interface{}) []byte {
-	var buf = new(bytes.Buffer)
-	buf.WriteString(msg)
-	buf.WriteByte(';')
-	var enc = gob.NewEncoder(buf)
-	err := enc.Encode(obj)
-	if err != nil {
-		panic(err)
-	}
-	return buf.Bytes()
-}
-
-func deserialize(r io.Reader, value interface{}) {
-	var dec = gob.NewDecoder(r)
-	err := dec.Decode(value)
-	if err != nil {
-		panic(err)
-	}
-}
-
-func writeObj(conn net.Conn, msg string, obj interface{}) (err error) {
-	var data = serialize(msg, obj)
-	nbytes, err := conn.Write(data)
-	if err == nil && nbytes != len(data) {
-		err = errors.New("Couldn't write all bytes")
-	} else {
-		/*fmt.Println("Written btyes: ", nbytes)*/
-	}
-	return
-}
-
 func (n *Net) sendMessage(msg string, value interface{}) {
 	/*fmt.Printf(">> Sending message (%v, %v)\n", msg, value)*/
 
-	err := writeObj(n.conn, msg, value)
+	err := writeValue(n.conn, msg, value)
 	if err != nil {
 		panic(err)
 	}
@@ -275,18 +257,15 @@ func (n *Net) expectMessage(expectedMsg string, value interface{}) {
 		panic(fmt.Sprintf("Unexpected message %v", msg))
 	}
 
-	deserialize(n.conn, value)
+	readValue(n.conn, value)
 }
 
-func invertPlayer(player int) int {
-	return 1 - player
-}
-
+// Validate our timestamp with the peer, then use it as a seed value for the
+// RNG
 func (n *Net) negotiateTurn() int {
 	var timestamp = time.Now().Unix()
 	n.sendMessage("timestamp", timestamp)
 
-	//msg, value := receiveMessage(conn)
 	var otherFirstPlayer int
 	n.expectMessage("firstPlayer", &otherFirstPlayer)
 
@@ -302,32 +281,77 @@ func (n *Net) negotiateTurn() int {
 	return invertPlayer(firstPlayer)
 }
 
+// Check that the peer's timestamp is almost the same as ours and generate the
+// first player based on it
 func (n *Net) validateTurn() int {
 	var timestamp int64
 	n.expectMessage("timestamp", &timestamp)
 
 	mytime := time.Now().Unix()
 	if abs(mytime-timestamp) > 1 {
-		println("Bad timestamp")
 		n.sendMessage("fatal", "bad timestamp")
 		panic("bad timestamp")
 	}
 
-	rand.Seed(int64(timestamp))
-	var turn = rand.Intn(2)
-	n.sendMessage("firstPlayer", turn)
-	var otherTurn int
-	n.expectMessage("firstPlayer", &otherTurn)
-	if turn != otherTurn {
+	rand.Seed(timestamp)
+	var firstPlayer = rand.Intn(2)
+	n.sendMessage("firstPlayer", firstPlayer)
+
+	// Confirm chosen first player with the peer
+	var otherFirstPlayer int
+	n.expectMessage("firstPlayer", &otherFirstPlayer)
+	if firstPlayer != otherFirstPlayer {
 		n.sendMessage("fatal", "Mismatching first player")
 		panic("Mismatching first player")
 	}
-	return turn
+	return firstPlayer
 }
+
+/// Utility functions
 
 func abs(x int64) int64 {
 	if x < 0 {
 		return -x
 	}
 	return x
+}
+
+// Used by the connecting peer to correspond with the other peer's first player
+// choice
+func invertPlayer(player int) int {
+	return 1 - player
+}
+
+// Encode the value and send it to the peer
+func writeValue(conn net.Conn, msg string, obj interface{}) (err error) {
+	var data = serialize(msg, obj)
+	nbytes, err := conn.Write(data)
+	if err == nil && nbytes != len(data) {
+		err = errors.New("Couldn't write all bytes")
+	}
+	return
+}
+
+// Read the encoded value from the reader and decode it
+func readValue(r io.Reader, value interface{}) {
+	var dec = gob.NewDecoder(r)
+	err := dec.Decode(value)
+	if err != nil {
+		panic(err)
+	}
+}
+
+// Low-level encoding function
+func serialize(msg string, obj interface{}) []byte {
+	// One packet has the following format:
+	// <message string>;<gob-encoded data>
+	var buf = new(bytes.Buffer)
+	buf.WriteString(msg)
+	buf.WriteByte(';')
+	var enc = gob.NewEncoder(buf)
+	err := enc.Encode(obj)
+	if err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
 }

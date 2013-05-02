@@ -115,21 +115,18 @@ func runCommandLine() {
 	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
 
 	var net = NewNet()
-
+	var address = fmt.Sprintf("%v:%v", *addr, *port)
+	var err error
 	if serverMode {
 		fmt.Printf("Listening on port %v...\n", *port)
-		err := net.Listen(*port)
-		if err != nil {
-			printError(err)
-			os.Exit(1)
-		}
+		err = net.Listen(address)
 	} else {
 		println("Connecting to server...")
-		err := net.ConnectToServer(fmt.Sprintf("%v:%v", *addr, *port))
-		if err != nil {
-			printError(err)
-			os.Exit(1)
-		}
+		err = net.ConnectToServer(address)
+	}
+	if err != nil {
+		printError(err)
+		os.Exit(1)
 	}
 
 	println("\n*** \x1b[7mGame started\x1b[0m ***")
