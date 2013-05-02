@@ -24,6 +24,12 @@ const (
 	kCmdGameFinished
 )
 
+const (
+	kGameResultDraw = iota
+	kGameResultMeWin
+	kGameResultHeWin
+)
+
 type Cmd struct {
 	msgType int
 	payload interface{}
@@ -113,15 +119,13 @@ func (n *Net) ConnectToServer(address string) (err error) {
 func (n *Net) checkResult(result int) bool {
 	if result > GameFinished {
 		if result == Draw {
-			n.GameResult = Draw
-		} else if result == Player1Win && n.firstPlayer == 0 {
-			n.GameResult = MeWin
-		} else if result == Player2Win && n.firstPlayer == 1 {
-			n.GameResult = MeWin
+			n.GameResult = kGameResultDraw
+		} else if (result == Player1Win && n.firstPlayer == 0) ||
+		(result == Player2Win && n.firstPlayer == 1) {
+			n.GameResult = kGameResultMeWin
 		} else {
-			n.GameResult = HeWin
+			n.GameResult = kGameResultHeWin
 		}
-		n.finalResult = result
 		return true
 	}
 	return false
@@ -130,10 +134,10 @@ func (n *Net) checkResult(result int) bool {
 func (n *Net) handleConnection() {
 	var state int
 	if n.firstPlayer == 0 {
-		ownChar, oppChar = 'X', 'O'
+		n.Board.ownChar, n.Board.oppChar = Player1Char, Player2Char
 		state = kStateMyTurn
 	} else {
-		ownChar, oppChar = 'O', 'X'
+		n.Board.ownChar, n.Board.oppChar = Player2Char, Player1Char
 		state = kStateHisTurn
 	}
 
@@ -165,7 +169,7 @@ func (n *Net) handleConnection() {
 			n.expectMessage("turn", &turn)
 
 			// Validate peer's move
-			result, err := n.Board.makeMove(turn.Coords, oppChar)
+			result, err := n.Board.makeMove(turn.Coords, n.Board.oppChar)
 			if err != nil {
 				printError(err)
 				panic(err)
@@ -198,7 +202,7 @@ func (n *Net) handleConnection() {
 			var result int
 			n.expectMessage("winstatus", &result)
 
-			if result != n.finalResult {
+			if result != n.Board.finalResult {
 				n.sendMessage("winstatusConfirmation", false)
 				panic("Failed to agree on final result")
 			} else {

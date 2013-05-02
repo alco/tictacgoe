@@ -1,13 +1,14 @@
 package main
 
+// Game logic implementation
+
 import (
 	"errors"
 )
 
-var ownChar, oppChar int
 const (
-	player1Char = 'X'
-	player2Char = 'O'
+	Player1Char = 'X'
+	Player2Char = 'O'
 )
 
 const (
@@ -18,13 +19,10 @@ const (
 	Player1Win
 	Player2Win
 	Draw
-
-	MeWin
-	HeWin
 )
 
 func mapChar(char int) int {
-	if char == player1Char {
+	if char == Player1Char {
 		return Player1Win
 	}
 	return Player2Win
@@ -33,8 +31,9 @@ func mapChar(char int) int {
 type Board struct {
 	b         [3][3]int
 	freeCells int
-	gameResult int
 	finalResult int
+	ownChar     int
+	oppChar     int
 }
 
 func NewBoard() *Board {
@@ -88,6 +87,7 @@ func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 		*cell = char
 		b.freeCells -= 1
 		if result := b.checkWinningCondition(coords); result != 0 {
+			b.finalResult = result
 			return result, nil
 		} else if b.freeCells == 0 {
 			return Draw, nil
@@ -97,13 +97,14 @@ func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 	return NoMove, errors.New("Cell already taken.")
 }
 
-func (b *Board) waitForOpponent() (int, error) {
-	for i := 0; i < 3; i++ {
-		for j := 0; j < 3; j++ {
-			if b.b[i][j] == ' ' {
-				return b.makeMove([2]int{i, j}, oppChar)
-			}
-		}
-	}
-	return NoMove, errors.New("No free cell found")
-}
+// Used for testing
+//func (b *Board) waitForOpponent() (int, error) {
+//	for i := 0; i < 3; i++ {
+//		for j := 0; j < 3; j++ {
+//			if b.b[i][j] == ' ' {
+//				return b.makeMove([2]int{i, j}, oppChar)
+//			}
+//		}
+//	}
+//	return NoMove, errors.New("No free cell found")
+//}
