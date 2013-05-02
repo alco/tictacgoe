@@ -5,14 +5,14 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"math/rand"
 	"os"
 	"strings"
-	"time"
 )
 
+// Wrap os.Stdin to conveniently read strings
 var stdin = bufio.NewReader(os.Stdin)
 
+// Read input from the user
 func getMove() (str string, err error) {
 	print("> ") // prompt
 
@@ -23,6 +23,7 @@ func getMove() (str string, err error) {
 	return str[:len(str)-1], err
 }
 
+// Map ASCII letter to an integer in range 0..2
 func parseLetter(char byte, coord *int) bool {
 	if char >= 'a' && char <= 'c' {
 		*coord = int(char - 'a')
@@ -31,6 +32,7 @@ func parseLetter(char byte, coord *int) bool {
 	return false
 }
 
+// Map ASCII digit to an integer in range 0..2
 func parseDigit(char byte, coord *int) bool {
 	if char >= '1' && char <= '3' {
 		*coord = int(char - '1')
@@ -39,6 +41,7 @@ func parseDigit(char byte, coord *int) bool {
 	return false
 }
 
+// Convert a string representing a move to integer coordinates on the board
 func parseMove(move string) (coords [2]int, err error) {
 	err = errors.New("err: Invalid move.")
 
@@ -63,15 +66,11 @@ func parseMove(move string) (coords [2]int, err error) {
 	return coords, nil
 }
 
-func parseCommand(str string) (string, error) {
-	return "", errors.New("err: invalid command")
-}
-
+// Print the error in red text
 func printError(err interface{}) {
 	fmt.Printf("\x1b[31m%v\x1b[0m\n", err)
 }
 
-var mode = flag.String("mode", "server", "Which mode to run in: server or client")
 
 type Cmd struct {
 	msgType int
@@ -79,6 +78,11 @@ type Cmd struct {
 }
 
 var board *Board
+
+// CLI flags
+var mode = flag.String("mode", "server", "Which mode to run in: server or client")
+var addr = flag.String("addr", "localhost", "Address to connect to")
+var port = flag.Int("port", 8888, "Port to listen on or connect to")
 
 func main() {
 	flag.Parse()
@@ -97,22 +101,19 @@ func main() {
 	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
 	board = NewBoard()
 
-	rand.Seed(time.Now().Unix())
-
-	/*var firstPlayer int*/
 	var cmdChan chan int
 	var responseChan chan Cmd
 	var err error
 	if serverMode {
-		println("Listening on port 8888...")
-		cmdChan, responseChan, err = listen(board)
+		fmt.Printf("Listening on port %v...\n", *port)
+		cmdChan, responseChan, err = listen(board, *port)
 		if err != nil {
 			printError(err)
 			os.Exit(1)
 		}
 	} else {
 		println("Connecting to server...")
-		cmdChan, responseChan, err = connectToServer("localhost:8888")
+		cmdChan, responseChan, err = connectToServer(fmt.Sprintf("%v:%v", *addr, *port))
 		if err != nil {
 			printError(err)
 			os.Exit(1)

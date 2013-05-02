@@ -31,12 +31,12 @@ type BoardNet struct {
 }
 
 // Server
-func listen(b *Board) (cmdChan chan int, responseChan chan Cmd, err error) {
+func listen(b *Board, port int) (cmdChan chan int, responseChan chan Cmd, err error) {
 	board := &BoardNet{}
 	board.Board = b
 	board.comChan = make(chan int)
 
-	ln, err := net.Listen("tcp", ":8888")
+	ln, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 	if err != nil {
 		return
 	}
