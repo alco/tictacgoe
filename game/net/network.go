@@ -1,4 +1,4 @@
-package main
+package net
 
 import (
 	"bytes"
@@ -9,6 +9,8 @@ import (
 	"math/rand"
 	"net"
 	"time"
+
+	"tictacgoe/game"
 )
 
 // Possible state for the connection to be in
@@ -20,21 +22,21 @@ const (
 
 // Commands used for communication with the view module of the program
 const (
-	kCmdMakeTurn = iota
-	kCmdWaitForOpponent
-	kCmdWaitForResultConfirmation
-	kCmdGameFinished
+	CmdMakeTurn = iota
+	CmdWaitForOpponent
+	CmdWaitForResultConfirmation
+	CmdGameFinished
 )
 
 // The final outcome of a match
 const (
-	kGameResultDraw = iota
-	kGameResultMeWin
-	kGameResultHeWin
+	GameResultDraw = iota
+	GameResultMeWin
+	GameResultHeWin
 )
 
 // Message format for exchange with the view module
-type Cmd struct {
+type cmdStruct struct {
 	msgType int
 	payload interface{}
 }
@@ -51,33 +53,33 @@ type TurnData struct {
 }
 
 type Net struct {
-	*Board
+	*game.Board
 	GameResult int
 	Commands   chan int
 
 	conn         net.Conn
 	firstPlayer  int
-	responseChan chan Cmd
+	responseChan chan cmdStruct
 }
 
 func NewNet() *Net {
 	var n Net
-	n.Board = NewBoard()
+	n.Board = game.NewBoard()
 	n.Commands = make(chan int)
-	n.responseChan = make(chan Cmd)
+	n.responseChan = make(chan cmdStruct)
 	return &n
 }
 
 // Interface for the client
 
-func (n *Net) SendResponse(response Cmd) {
-	n.responseChan <- response
+func (n *Net) SendResponse(msgType int, payload interface{}) {
+	n.responseChan <- cmdStruct{msgType, payload}
 }
 
 // Communicating with a client
 
 // Sync call
-func (n *Net) callCommand(cmd int) Cmd {
+func (n *Net) callCommand(cmd int) cmdStruct {
 	n.Commands <- cmd
 	return <-n.responseChan
 }
@@ -126,14 +128,14 @@ func (n *Net) ConnectToServer(address string) (err error) {
 // able to display it (since the view is not aware whether we are the first
 // player or second)
 func (n *Net) checkResult(result int) bool {
-	if result > GameFinished {
-		if result == Draw {
-			n.GameResult = kGameResultDraw
-		} else if (result == Player1Win && n.firstPlayer == 0) ||
-			(result == Player2Win && n.firstPlayer == 1) {
-			n.GameResult = kGameResultMeWin
+	if result > game.GameFinished {
+		if result == game.Draw {
+			n.GameResult = GameResultDraw
+		} else if (result == game.Player1Win && n.firstPlayer == 0) ||
+			(result == game.Player2Win && n.firstPlayer == 1) {
+			n.GameResult = GameResultMeWin
 		} else {
-			n.GameResult = kGameResultHeWin
+			n.GameResult = GameResultHeWin
 		}
 		return true
 	}
@@ -156,29 +158,28 @@ func (n *Net) handleConnection() {
 		switch state {
 		case kStateMyTurn:
 			// Get turn data from the view module
-			var cmd = n.callCommand(kCmdMakeTurn)
+			var cmd = n.callCommand(CmdMakeTurn)
 
 			var turn = cmd.payload.(TurnData)
 			n.sendMessage(kMessageTurn, turn)
 
 			var gameFinished = n.checkResult(turn.Result)
 			if gameFinished {
-				n.castCommand(kCmdWaitForResultConfirmation)
+				n.castCommand(CmdWaitForResultConfirmation)
 				state = kStateWaitForResultConfirmation
 			} else {
 				state = kStateHisTurn
 			}
 
 		case kStateHisTurn:
-			n.castCommand(kCmdWaitForOpponent)
+			n.castCommand(CmdWaitForOpponent)
 
 			var turn TurnData
 			n.expectMessage(kMessageTurn, &turn)
 
 			// Validate peer's move
-			result, err := n.Board.makeOppMove(turn.Coords)
+			result, err := n.MakeOppMove(turn.Coords)
 			if err != nil {
-				printError(err)
 				panic(err)
 			}
 
@@ -198,7 +199,7 @@ func (n *Net) handleConnection() {
 				n.expectMessage("winstatusConfirmation", &resultsMatch)
 
 				if resultsMatch {
-					n.castCommand(kCmdGameFinished)
+					n.castCommand(CmdGameFinished)
 					return
 				} else {
 					panic("Could not agree on game result")
@@ -210,12 +211,12 @@ func (n *Net) handleConnection() {
 			var result int
 			n.expectMessage("winstatus", &result)
 
-			if result != n.Board.finalResult {
+			if result != n.FinalResult() {
 				n.sendMessage("winstatusConfirmation", false)
 				panic("Failed to agree on final result")
 			} else {
 				n.sendMessage("winstatusConfirmation", true)
-				n.castCommand(kCmdGameFinished)
+				n.castCommand(CmdGameFinished)
 			}
 			return
 		}

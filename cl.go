@@ -9,6 +9,9 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"tictacgoe/game"
+	gamenet "tictacgoe/game/net"
 )
 
 // Wrap os.Stdin to conveniently read strings
@@ -74,12 +77,12 @@ func printError(err interface{}) {
 }
 
 // Format the current board state nicely
-func drawBoard(b *Board) {
+func drawBoard(b *game.Board) {
 	var formatCell = func(char int) string {
 		var seq string
-		if char == b.oppChar {
+		if char == b.OppChar() {
 			seq = "\x1b[41m[%c]\x1b[0m"
-		} else if char == b.ownChar {
+		} else if char == b.OwnChar() {
 			seq = "\x1b[7m[%c]\x1b[0m"
 		} else {
 			seq = "[%c]"
@@ -87,9 +90,9 @@ func drawBoard(b *Board) {
 		return fmt.Sprintf(seq, char)
 	}
 	fmt.Printf("\n   1   2   3\na %s %s %s\nb %s %s %s\nc %s %s %s\n",
-		formatCell(b.b[0][0]), formatCell(b.b[0][1]), formatCell(b.b[0][2]),
-		formatCell(b.b[1][0]), formatCell(b.b[1][1]), formatCell(b.b[1][2]),
-		formatCell(b.b[2][0]), formatCell(b.b[2][1]), formatCell(b.b[2][2]))
+		formatCell(b.At(0, 0)), formatCell(b.At(0, 1)), formatCell(b.At(0, 2)),
+		formatCell(b.At(1, 0)), formatCell(b.At(1, 1)), formatCell(b.At(1, 2)),
+		formatCell(b.At(2, 0)), formatCell(b.At(2, 1)), formatCell(b.At(2, 2)))
 
 }
 
@@ -114,7 +117,7 @@ func runCommandLine() {
 
 	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
 
-	var net = NewNet()
+	var net = gamenet.NewNet()
 	var address = fmt.Sprintf("%v:%v", *addr, *port)
 	var err error
 	if serverMode {
@@ -133,7 +136,7 @@ func runCommandLine() {
 
 	for {
 		switch <-net.Commands {
-		case kCmdMakeTurn:
+		case gamenet.CmdMakeTurn:
 			println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
 
 			for {
@@ -150,34 +153,34 @@ func runCommandLine() {
 					continue
 				}
 
-				result, err := net.Board.makeOwnMove(coords)
+				result, err := net.MakeOwnMove(coords)
 				if err != nil {
 					printError(err)
 					continue
 				}
 
-				net.SendResponse(Cmd{1, TurnData{coords, result}})
+				net.SendResponse(1, gamenet.TurnData{coords, result})
 				break
 			}
 
-		case kCmdWaitForOpponent:
+		case gamenet.CmdWaitForOpponent:
 			drawBoard(net.Board)
 			println("Waiting for opponent...")
 
-		case kCmdWaitForResultConfirmation:
+		case gamenet.CmdWaitForResultConfirmation:
 			drawBoard(net.Board)
 			println("Waiting for game result confirmation with the peer...")
 
-		case kCmdGameFinished:
+		case gamenet.CmdGameFinished:
 			drawBoard(net.Board)
 			println()
 
 			switch net.GameResult {
-			case kGameResultDraw:
+			case gamenet.GameResultDraw:
 				println("*** \x1b[7mIt's a draw\x1b[0m ***")
-			case kGameResultMeWin:
+			case gamenet.GameResultMeWin:
 				println("*** \x1b[42m\x1b[30mYou win!\x1b[0m ***")
-			case kGameResultHeWin:
+			case gamenet.GameResultHeWin:
 				println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
 			}
 			os.Exit(0)

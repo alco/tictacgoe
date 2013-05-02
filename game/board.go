@@ -1,4 +1,4 @@
-package main
+package game
 
 // Game logic implementation
 
@@ -47,6 +47,26 @@ func NewBoard() *Board {
 	return &b
 }
 
+/// Read-only getters
+
+func (b *Board) OwnChar() int {
+	return b.ownChar
+}
+
+func (b *Board) OppChar() int {
+	return b.oppChar
+}
+
+func (b *Board) At(i, j int) int {
+	return b.b[i][j]
+}
+
+func (b *Board) FinalResult() int {
+	return b.finalResult
+}
+
+/// Public methods
+
 func (b *Board) SetFirstPlayer(firstPlayer int) {
 	if firstPlayer == 0 {
 		b.ownChar, b.oppChar = Player1Char, Player2Char
@@ -89,11 +109,11 @@ func (b *Board) checkWinningCondition(coords [2]int) int {
 	return 0
 }
 
-func (b *Board) makeOwnMove(coords [2]int) (int, error) {
+func (b *Board) MakeOwnMove(coords [2]int) (int, error) {
 	return b.makeMove(coords, b.ownChar)
 }
 
-func (b *Board) makeOppMove(coords [2]int) (int, error) {
+func (b *Board) MakeOppMove(coords [2]int) (int, error) {
 	return b.makeMove(coords, b.oppChar)
 }
 
