@@ -135,13 +135,13 @@ func (b *Board) makeMove(coords [2]int, char int) (int, error) {
 }
 
 // Used for testing
-//func (b *Board) waitForOpponent() (int, error) {
-//	for i := 0; i < 3; i++ {
-//		for j := 0; j < 3; j++ {
-//			if b.b[i][j] == ' ' {
-//				return b.makeMove([2]int{i, j}, oppChar)
-//			}
-//		}
-//	}
-//	return NoMove, errors.New("No free cell found")
-//}
+func (b *Board) MakeAIMove() (int, error) {
+	for i := 0; i < 3; i++ {
+		for j := 0; j < 3; j++ {
+			if b.b[i][j] == ' ' {
+				return b.makeMove([2]int{i, j}, b.oppChar)
+			}
+		}
+	}
+	return NoMove, errors.New("No free cell found")
+}

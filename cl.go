@@ -12,6 +12,7 @@ import (
 
 	"tictacgoe/game"
 	"tictacgoe/game/net"
+	/*"tictacgoe/game/local"*/
 )
 
 // Wrap os.Stdin to conveniently read strings
@@ -117,15 +118,15 @@ func runCommandLine() {
 
 	fmt.Println("*** Welcome to Tic-Tac-Goe ***")
 
-	var net = gamenet.NewNet()
+	var loop = gameloop.NewLoop()
 	var address = fmt.Sprintf("%v:%v", *addr, *port)
 	var err error
 	if serverMode {
 		fmt.Printf("Listening on port %v...\n", *port)
-		err = net.Listen(address)
+		err = loop.Listen(address)
 	} else {
 		println("Connecting to server...")
-		err = net.ConnectToServer(address)
+		err = loop.ConnectToServer(address)
 	}
 	if err != nil {
 		printError(err)
@@ -135,17 +136,17 @@ func runCommandLine() {
 	println("\n*** \x1b[7mGame started\x1b[0m ***")
 
 	for {
-		switch <-net.Commands {
-		case gamenet.CmdHandleError:
-			err = net.Error()
+		switch <-loop.Commands {
+		case gameloop.CmdHandleError:
+			err = loop.Error()
 			printError(err)
 			os.Exit(1)
 
-		case gamenet.CmdMakeTurn:
+		case gameloop.CmdMakeTurn:
 			println("\n<<< \x1b[1mYour turn\x1b[0m >>>")
 
 			for {
-				drawBoard(net.Board)
+				drawBoard(loop.Board)
 
 				var move, err = getMove()
 				if err != nil {
@@ -158,34 +159,34 @@ func runCommandLine() {
 					continue
 				}
 
-				result, err := net.MakeOwnMove(coords)
+				result, err := loop.MakeOwnMove(coords)
 				if err != nil {
 					printError(err)
 					continue
 				}
 
-				net.SendResponse(1, gamenet.TurnData{coords, result})
+				loop.SendResponse(1, gameloop.TurnData{coords, result})
 				break
 			}
 
-		case gamenet.CmdWaitForOpponent:
-			drawBoard(net.Board)
+		case gameloop.CmdWaitForOpponent:
+			drawBoard(loop.Board)
 			println("Waiting for opponent...")
 
-		case gamenet.CmdWaitForResultConfirmation:
-			drawBoard(net.Board)
+		case gameloop.CmdWaitForResultConfirmation:
+			drawBoard(loop.Board)
 			println("Waiting for game result confirmation with the peer...")
 
-		case gamenet.CmdGameFinished:
-			drawBoard(net.Board)
+		case gameloop.CmdGameFinished:
+			drawBoard(loop.Board)
 			println()
 
-			switch net.GameResult {
-			case gamenet.GameResultDraw:
+			switch loop.GameResult {
+			case gameloop.GameResultDraw:
 				println("*** \x1b[7mIt's a draw\x1b[0m ***")
-			case gamenet.GameResultMeWin:
+			case gameloop.GameResultMeWin:
 				println("*** \x1b[42m\x1b[30mYou win!\x1b[0m ***")
-			case gamenet.GameResultHeWin:
+			case gameloop.GameResultHeWin:
 				println("*** \x1b[41m\x1b[30mYou lose!\x1b[0m ***")
 			}
 			os.Exit(0)

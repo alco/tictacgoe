@@ -1,4 +1,4 @@
-package gamenet
+package gameloop
 
 import (
 	"bytes"
@@ -59,7 +59,7 @@ type TurnData struct {
 	Result int
 }
 
-type Net struct {
+type Loop struct {
 	*game.Board
 	GameResult int
 	Commands   chan int
@@ -70,8 +70,8 @@ type Net struct {
 	lastError    error
 }
 
-func NewNet() *Net {
-	var n Net
+func NewLoop() *Loop {
+	var n Loop
 	n.Board = game.NewBoard()
 	n.Commands = make(chan int)
 	n.responseChan = make(chan cmdStruct)
@@ -80,30 +80,30 @@ func NewNet() *Net {
 
 // Interface for the client
 
-func (n *Net) SendResponse(msgType int, payload interface{}) {
+func (n *Loop) SendResponse(msgType int, payload interface{}) {
 	n.responseChan <- cmdStruct{msgType, payload}
 }
 
-func (n *Net) Error() error {
+func (n *Loop) Error() error {
 	return n.lastError
 }
 
 // Communicating with a client
 
 // Sync call
-func (n *Net) callCommand(cmd int) cmdStruct {
+func (n *Loop) callCommand(cmd int) cmdStruct {
 	n.Commands <- cmd
 	return <-n.responseChan
 }
 
 // Async call
-func (n *Net) castCommand(cmd int) {
+func (n *Loop) castCommand(cmd int) {
 	n.Commands <- cmd
 }
 
 /// Error handling
 
-func (n *Net) fatal(val interface{}, args ...interface{}) {
+func (n *Loop) fatal(val interface{}, args ...interface{}) {
 	var err error
 	switch val.(type) {
 	case string:
@@ -119,7 +119,7 @@ func (n *Net) fatal(val interface{}, args ...interface{}) {
 	panic(err) // this panic will be caught in handleConnection (unless it's a runtime error)
 }
 
-func (n *Net) fatalSend(errMsg string) {
+func (n *Loop) fatalSend(errMsg string) {
 	n.sendMessage(kMessageFatal, errMsg)
 	n.conn.Close()
 
@@ -129,7 +129,7 @@ func (n *Net) fatalSend(errMsg string) {
 
 /// Establishing a connection
 
-func (n *Net) Listen(address string) (err error) {
+func (n *Loop) Listen(address string) (err error) {
 	ln, err := net.Listen("tcp", address)
 	if err != nil {
 		return
@@ -147,7 +147,7 @@ func (n *Net) Listen(address string) (err error) {
 	return
 }
 
-func (n *Net) ConnectToServer(address string) (err error) {
+func (n *Loop) ConnectToServer(address string) (err error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return
@@ -165,7 +165,7 @@ func (n *Net) ConnectToServer(address string) (err error) {
 // When the game is finished, we set our local result value for the view to be
 // able to display it (since the view is not aware whether we are the first
 // player or second)
-func (n *Net) checkResult(result int) bool {
+func (n *Loop) checkResult(result int) bool {
 	if result > game.GameFinished {
 		if result == game.Draw {
 			n.GameResult = GameResultDraw
@@ -182,7 +182,7 @@ func (n *Net) checkResult(result int) bool {
 
 // Run loop of our program. Handles communication with the other peer and with
 // the view module (for querying user input and display game progress)
-func (n *Net) handleConnection() {
+func (n *Loop) handleConnection() {
 	// Trap all panics except runtime errors
 	defer func() {
 		if r := recover(); r != nil {
@@ -272,7 +272,7 @@ func (n *Net) handleConnection() {
 	}
 }
 
-func (n *Net) sendMessage(msg string, value interface{}) {
+func (n *Loop) sendMessage(msg string, value interface{}) {
 	/*fmt.Printf(">> Sending message (%v, %v)\n", msg, value)*/
 
 	err := writeValue(n.conn, msg, value)
@@ -281,7 +281,7 @@ func (n *Net) sendMessage(msg string, value interface{}) {
 	}
 }
 
-func (n *Net) receiveMessage() (string, error) {
+func (n *Loop) receiveMessage() (string, error) {
 	var byteBuf = make([]byte, 1)
 	var buf []byte
 	var msg string
@@ -301,7 +301,7 @@ func (n *Net) receiveMessage() (string, error) {
 	return msg, nil
 }
 
-func (n *Net) expectMessage(expectedMsg string, value interface{}) {
+func (n *Loop) expectMessage(expectedMsg string, value interface{}) {
 	msg, err := n.receiveMessage()
 	if err != nil {
 		n.fatal(err)
@@ -328,7 +328,7 @@ func (n *Net) expectMessage(expectedMsg string, value interface{}) {
 
 // Validate our timestamp with the peer, then use it as a seed value for the
 // RNG
-func (n *Net) negotiateTurn() int {
+func (n *Loop) negotiateTurn() int {
 	var timestamp = time.Now().Unix()
 	n.sendMessage(kMessageTimestamp, timestamp)
 
@@ -348,7 +348,7 @@ func (n *Net) negotiateTurn() int {
 
 // Check that the peer's timestamp is almost the same as ours and generate the
 // first player based on it
-func (n *Net) validateTurn() int {
+func (n *Loop) validateTurn() int {
 	var timestamp int64
 	n.expectMessage(kMessageTimestamp, &timestamp)
 
